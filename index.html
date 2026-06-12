@@ -1,0 +1,1784 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>周计划 · 每日任务</title>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/persist@3.14.9/dist/cdn.min.js"></script>
+<style>
+/* ============================================================
+   CSS Custom Properties — Theme System
+   ============================================================ */
+:root {
+  --color-bg: #f5f3f0;
+  --color-surface: #ffffff;
+  --color-surface-hover: #faf9f7;
+  --color-border: #e8e4df;
+  --color-text: #2d2a26;
+  --color-text-secondary: #6b6560;
+  --color-text-muted: #9c9590;
+  --color-primary: #4a7c59;
+  --color-primary-light: #e8f0ea;
+  --color-primary-hover: #3d6749;
+  --color-danger: #c44d4d;
+  --color-danger-light: #fce8e8;
+  --color-warning: #d4952a;
+  --color-warning-light: #fdf3e2;
+  --color-high: #d45a4a;
+  --color-medium: #d4952a;
+  --color-low: #4a7c59;
+  --color-completed: #9c9590;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --font-mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  --transition: 0.2s ease;
+}
+
+[data-theme="dark"] {
+  --color-bg: #1a1816;
+  --color-surface: #252320;
+  --color-surface-hover: #2e2b27;
+  --color-border: #3a3631;
+  --color-text: #e8e4df;
+  --color-text-secondary: #a8a39d;
+  --color-text-muted: #6b6560;
+  --color-primary: #6ba87a;
+  --color-primary-light: #243a2a;
+  --color-primary-hover: #7dba8b;
+  --color-danger: #d46a6a;
+  --color-danger-light: #3a2020;
+  --color-warning: #d4a040;
+  --color-warning-light: #3a3020;
+  --color-high: #d46a5a;
+  --color-medium: #d4a040;
+  --color-low: #6ba87a;
+  --color-completed: #6b6560;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+/* ============================================================
+   Base Styles
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.6;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============================================================
+   App Shell
+   ============================================================ */
+.app-container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 16px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============================================================
+   Header
+   ============================================================ */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.app-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.app-logo .icon { font-size: 1.5rem; }
+
+/* Tab Navigation */
+.tab-nav {
+  display: flex;
+  gap: 4px;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border);
+}
+
+.tab-btn {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+
+.tab-btn:hover { color: var(--color-text); background: var(--color-bg); }
+.tab-btn.active {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.date-display {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+/* ============================================================
+   Main Content Area
+   ============================================================ */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ============================================================
+   Card Component
+   ============================================================ */
+.card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* ============================================================
+   Today View Layout
+   ============================================================ */
+.today-layout {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .today-layout {
+    grid-template-columns: 1fr;
+  }
+  .tab-btn { padding: 6px 10px; font-size: 0.8rem; }
+  .date-display { display: none; }
+  .app-header { justify-content: center; }
+}
+
+/* ============================================================
+   Task Item
+   ============================================================ */
+.task-list { list-style: none; }
+
+.task-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition);
+  border: 1px solid transparent;
+}
+
+.task-item:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border);
+}
+
+.task-item.completed .task-title {
+  text-decoration: line-through;
+  color: var(--color-completed);
+}
+
+/* Custom checkbox */
+.task-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--color-border);
+  border-radius: 50%;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition);
+  display: grid;
+  place-items: center;
+  background: var(--color-surface);
+}
+
+.task-checkbox:hover { border-color: var(--color-primary); }
+.task-checkbox:checked {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.task-checkbox:checked::after {
+  content: '✓';
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.task-title {
+  flex: 1;
+  font-size: 0.9375rem;
+  transition: color var(--transition);
+}
+
+.priority-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.priority-dot.high { background: var(--color-high); }
+.priority-dot.medium { background: var(--color-medium); }
+.priority-dot.low { background: var(--color-low); }
+
+.task-remove {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: all var(--transition);
+}
+
+.task-item:hover .task-remove { opacity: 1; }
+.task-remove:hover { color: var(--color-danger); background: var(--color-danger-light); }
+
+/* ============================================================
+   Quick Add Input
+   ============================================================ */
+.quick-add {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.quick-add input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 0.9375rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.quick-add input:focus { border-color: var(--color-primary); }
+.quick-add input::placeholder { color: var(--color-text-muted); }
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all var(--transition);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+.btn-primary:hover { background: var(--color-primary-hover); }
+
+.btn-secondary {
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+.btn-secondary:hover { background: var(--color-surface-hover); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+  padding: 6px 10px;
+}
+.btn-ghost:hover { color: var(--color-text); background: var(--color-bg); }
+
+.btn-danger {
+  background: var(--color-danger);
+  color: #fff;
+}
+.btn-danger:hover { opacity: 0.9; }
+
+.btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+.btn-icon {
+  width: 32px; height: 32px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+}
+
+/* ============================================================
+   Pool Sidebar
+   ============================================================ */
+.pool-sidebar .card { position: sticky; top: 16px; }
+
+.pool-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.pool-count {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.pool-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  transition: all var(--transition);
+}
+
+.pool-item:hover { background: var(--color-surface-hover); }
+.pool-item .task-title { font-size: 0.875rem; }
+
+.pool-add-btn {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  border: none;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--transition);
+}
+
+.pool-add-btn:hover { background: var(--color-primary); color: #fff; }
+
+/* ============================================================
+   Empty State
+   ============================================================ */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--color-text-muted);
+}
+
+.empty-state .emoji { font-size: 2.5rem; margin-bottom: 12px; }
+.empty-state .msg { font-size: 0.9375rem; margin-bottom: 16px; }
+
+/* ============================================================
+   Completion Summary
+   ============================================================ */
+.completion-bar {
+  height: 6px;
+  background: var(--color-bg);
+  border-radius: 3px;
+  margin-top: 12px;
+  overflow: hidden;
+}
+
+.completion-fill {
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.completion-text {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  margin-top: 6px;
+}
+
+/* ============================================================
+   Reflection
+   ============================================================ */
+.reflection-box {
+  margin-top: 16px;
+}
+
+.reflection-box textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  resize: vertical;
+  min-height: 60px;
+  font-family: inherit;
+  transition: border-color var(--transition);
+}
+
+.reflection-box textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+/* ============================================================
+   History View
+   ============================================================ */
+.history-chart {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border);
+  margin-bottom: 16px;
+}
+
+.history-chart canvas { width: 100%; height: 200px; }
+
+.week-group {
+  margin-bottom: 20px;
+}
+
+.week-group-header {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.day-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border);
+  transition: all var(--transition);
+}
+
+.day-card:hover { box-shadow: var(--shadow-md); }
+
+.day-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.day-card-date {
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.day-card-stats {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.day-card-stats.done { color: var(--color-low); }
+
+.history-task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 0.875rem;
+}
+
+.history-task .status-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.history-task.done { color: var(--color-completed); text-decoration: line-through; }
+.history-task.undone { color: var(--color-text-secondary); }
+
+.reflection-readonly {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+/* ============================================================
+   Week Plan View
+   ============================================================ */
+.plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.plan-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.plan-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.plan-card-header:hover { background: var(--color-surface-hover); }
+
+.plan-card-header .plan-name {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plan-card-header .plan-meta {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.plan-card-body {
+  padding: 0 18px 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.template-task-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.template-task-row:last-child { border-bottom: none; }
+
+.template-task-row input[type="text"] {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 0.875rem;
+  color: var(--color-text);
+  padding: 4px 8px;
+  border-radius: 4px;
+  outline: none;
+}
+
+.template-task-row input[type="text"]:focus {
+  background: var(--color-bg);
+}
+
+.day-chip {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+
+.day-chip:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.day-chip.selected { background: var(--color-primary-light); color: var(--color-primary); border-color: var(--color-primary); }
+
+.priority-select {
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.add-template-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.add-template-row input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  background: var(--color-bg);
+  color: var(--color-text);
+  outline: none;
+}
+
+.add-template-row input:focus { border-color: var(--color-primary); }
+
+.create-plan-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.create-plan-row input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 0.9375rem;
+  background: transparent;
+  color: var(--color-text);
+  outline: none;
+}
+
+.create-plan-row input:focus { border-color: var(--color-primary); border-style: solid; }
+
+/* ============================================================
+   Modal
+   ============================================================ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.modal-content {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--color-border);
+}
+
+.modal-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+/* ============================================================
+   Setting Row
+   ============================================================ */
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.setting-row:last-child { border-bottom: none; }
+
+.setting-label {
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.setting-desc {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* Toggle Switch */
+.toggle {
+  width: 48px; height: 26px;
+  background: var(--color-border);
+  border-radius: 13px;
+  cursor: pointer;
+  position: relative;
+  transition: background var(--transition);
+  flex-shrink: 0;
+}
+
+.toggle.active { background: var(--color-primary); }
+
+.toggle::after {
+  content: '';
+  position: absolute;
+  width: 22px; height: 22px;
+  background: white;
+  border-radius: 50%;
+  top: 2px; left: 2px;
+  transition: transform var(--transition);
+}
+
+.toggle.active::after { transform: translateX(22px); }
+
+/* ============================================================
+   Toast Notifications
+   ============================================================ */
+.toast-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toast {
+  padding: 12px 20px;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+  box-shadow: var(--shadow-md);
+  animation: slideIn 0.3s ease;
+  max-width: 320px;
+}
+
+.toast.success { background: #e8f0ea; color: #2d6a3f; border: 1px solid #b8d8c0; }
+.toast.info { background: #e8eaf0; color: #2d3f6a; border: 1px solid #b8c4d8; }
+
+[data-theme="dark"] .toast.success { background: #1a3a24; color: #8fd4a0; border-color: #2d5a3a; }
+[data-theme="dark"] .toast.info { background: #1a243a; color: #8fa8d4; border-color: #2d3a5a; }
+
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* ============================================================
+   Apply Plan Selector
+   ============================================================ */
+.apply-plan-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.apply-plan-area select {
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  outline: none;
+}
+
+.apply-plan-area select:focus { border-color: var(--color-primary); }
+
+/* ============================================================
+   Transition helpers
+   ============================================================ */
+.fade-enter { transition: opacity 0.2s ease, transform 0.2s ease; }
+.fade-leave { transition: opacity 0.15s ease, transform 0.15s ease; }
+
+/* Week status bar */
+.week-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--color-primary-light);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  color: var(--color-primary);
+  margin-bottom: 16px;
+}
+
+.week-status .plan-label { font-weight: 600; }
+
+.hidden-file-input { display: none; }
+</style>
+</head>
+<body x-data="app()" x-cloak>
+
+<!-- ============================================================
+     App Shell
+     ============================================================ -->
+<div class="app-container">
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="app-logo">
+      <span class="icon">📋</span>
+      <span>周计划</span>
+    </div>
+    <nav class="tab-nav">
+      <button class="tab-btn" :class="{ active: activeTab === 'today' }" @click="activeTab = 'today'">📅 今日</button>
+      <button class="tab-btn" :class="{ active: activeTab === 'history' }" @click="activeTab = 'history'">📊 历史</button>
+      <button class="tab-btn" :class="{ active: activeTab === 'plans' }" @click="activeTab = 'plans'">📝 周计划</button>
+      <button class="tab-btn" :class="{ active: activeTab === 'settings' }" @click="activeTab = 'settings'">⚙️</button>
+    </nav>
+    <span class="date-display" x-text="formatToday()"></span>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-content">
+
+    <!-- ============================================================
+         TODAY VIEW
+         ============================================================ -->
+    <div x-show="activeTab === 'today'" x-transition>
+
+      <!-- Week Status -->
+      <div class="week-status" x-show="currentWeek.planTemplateName">
+        📋 本周计划：<span class="plan-label" x-text="currentWeek.planTemplateName"></span>
+        <span style="margin-left:auto;font-size:0.8rem" x-text="getWeekDateRange()"></span>
+      </div>
+
+      <!-- Apply Plan (when no plan is active) -->
+      <div class="apply-plan-area" x-show="!currentWeek.planTemplateName && planTemplates.length > 0">
+        <select x-model="selectedPlanId">
+          <option value="">— 选择周计划模板 —</option>
+          <template x-for="p in planTemplates" :key="p.id">
+            <option :value="p.id" x-text="p.name"></option>
+          </template>
+        </select>
+        <button class="btn btn-primary btn-sm"
+                @click="applyPlan(selectedPlanId)"
+                :disabled="!selectedPlanId">
+          🚀 应用到本周
+        </button>
+      </div>
+      <div class="empty-state" x-show="!currentWeek.planTemplateName && planTemplates.length === 0">
+        <div class="emoji">📝</div>
+        <div class="msg">还没有周计划模板</div>
+        <button class="btn btn-primary" @click="activeTab = 'plans'">去创建一个</button>
+      </div>
+
+      <div class="today-layout">
+        <!-- Left: Today's Tasks -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">☀️ 今日任务</span>
+            <span style="font-size:0.85rem;color:var(--color-text-muted)" x-text="formatToday()"></span>
+          </div>
+
+          <!-- Quick Add -->
+          <form class="quick-add" @submit.prevent="addAdHocTask(newTaskTitle); newTaskTitle = ''">
+            <input type="text"
+                   placeholder="快速添加临时任务…"
+                   x-model="newTaskTitle"
+                   @keydown.escape="newTaskTitle = ''">
+            <button class="btn btn-primary" type="submit" :disabled="!newTaskTitle.trim()">添加</button>
+          </form>
+
+          <!-- Task List -->
+          <ul class="task-list" x-show="todayTasks.length > 0">
+            <template x-for="(task, idx) in todayTasks" :key="task.id">
+              <li class="task-item" :class="{ completed: task.completed }">
+                <input type="checkbox"
+                       class="task-checkbox"
+                       :checked="task.completed"
+                       @change="toggleTask(task, idx)">
+                <span class="priority-dot" :class="task.priority || 'low'"></span>
+                <span class="task-title" x-text="task.title"></span>
+                <button class="task-remove" @click="removeTaskFromToday(idx)" title="移回任务池">↩</button>
+              </li>
+            </template>
+          </ul>
+
+          <!-- Empty -->
+          <div class="empty-state" x-show="todayTasks.length === 0">
+            <div class="emoji">☕️</div>
+            <div class="msg">今天还没有任务</div>
+            <p style="font-size:0.85rem;color:var(--color-text-muted)">
+              从右侧任务池添加，或直接输入临时任务
+            </p>
+          </div>
+
+          <!-- Completion -->
+          <div x-show="todayTasks.length > 0">
+            <div class="completion-bar">
+              <div class="completion-fill" :style="{ width: todayCompletionRate + '%' }"></div>
+            </div>
+            <div class="completion-text">
+              已完成 <strong x-text="completedCount"></strong> / <span x-text="todayTasks.length"></span>
+              <span x-show="todayCompletionRate === 100" style="margin-left:4px">🎉</span>
+            </div>
+          </div>
+
+          <!-- Daily Reflection -->
+          <div class="reflection-box">
+            <textarea
+              placeholder="💭 今日反思…（可选）"
+              x-model="currentDay.reflection"
+              @blur="saveReflection()"
+            ></textarea>
+          </div>
+        </div>
+
+        <!-- Right: Task Pool -->
+        <div class="pool-sidebar">
+          <div class="card">
+            <div class="pool-header">
+              <span class="card-title">📥 本周任务池</span>
+              <span class="pool-count" x-text="unassignedCount + ' 项'"></span>
+            </div>
+
+            <div x-show="unassignedTasks.length > 0">
+              <template x-for="(task, idx) in unassignedTasks" :key="task.id">
+                <div class="pool-item">
+                  <button class="pool-add-btn" @click="addFromPool(idx)" title="加入今日">+</button>
+                  <span style="flex:1;font-size:0.875rem" x-text="task.title"></span>
+                  <span class="priority-dot" :class="task.priority || 'low'"></span>
+                </div>
+              </template>
+            </div>
+
+            <div class="empty-state" x-show="unassignedTasks.length === 0" style="padding:20px">
+              <div class="emoji">✨</div>
+              <div class="msg" style="font-size:0.85rem">任务池已清空</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         HISTORY VIEW
+         ============================================================ -->
+    <div x-show="activeTab === 'history'" x-transition>
+      <!-- Chart -->
+      <div class="history-chart" x-show="historyWeeks.length > 0">
+        <div class="card-title" style="margin-bottom:12px">📈 近 4 周完成率</div>
+        <canvas id="historyChart" width="840" height="200"></canvas>
+      </div>
+
+      <!-- Week Groups -->
+      <div x-show="historyWeeks.length > 0">
+        <template x-for="week in historyWeeks" :key="week.id">
+          <div class="week-group">
+            <div class="week-group-header">
+              <span x-text="week.planTemplateName || '未命名周'"></span>
+              <span style="font-size:0.8rem;color:var(--color-text-muted)" x-text="formatWeekRange(week)"></span>
+            </div>
+            <template x-for="day in week.days" :key="day.date">
+              <div class="day-card">
+                <div class="day-card-header">
+                  <span class="day-card-date" x-text="formatDayHeader(day.date)"></span>
+                  <span class="day-card-stats"
+                        :class="{ done: getDayCompletion(day) === 100 }"
+                        x-text="getDayDoneCount(day) + '/' + day.tasks.length + ' 完成'"></span>
+                </div>
+                <template x-for="t in day.tasks" :key="t.id">
+                  <div class="history-task" :class="{ done: t.completed, undone: !t.completed }">
+                    <span class="status-icon" x-text="t.completed ? '✅' : '⬜'"></span>
+                    <span x-text="t.title"></span>
+                    <span x-show="t.isAdHoc" style="font-size:0.7rem;color:var(--color-text-muted)">临时</span>
+                  </div>
+                </template>
+                <div class="reflection-readonly" x-show="day.reflection" x-text="'💭 ' + day.reflection"></div>
+              </div>
+            </template>
+          </div>
+        </template>
+      </div>
+
+      <!-- No history -->
+      <div class="empty-state card" x-show="historyWeeks.length === 0">
+        <div class="emoji">📭</div>
+        <div class="msg">还没有历史记录</div>
+        <p style="font-size:0.85rem;color:var(--color-text-muted)">
+          开始使用后，这里会展示你每天的任务完成情况
+        </p>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         WEEK PLANS VIEW
+         ============================================================ -->
+    <div x-show="activeTab === 'plans'" x-transition>
+      <!-- Plan List -->
+      <div class="plan-list">
+        <template x-for="plan in planTemplates" :key="plan.id">
+          <div class="plan-card">
+            <div class="plan-card-header" @click="plan._expanded = !plan._expanded">
+              <span class="plan-name">
+                <span x-text="plan._expanded ? '📂' : '📁'"></span>
+                <span x-text="plan.name"></span>
+              </span>
+              <span style="display:flex;align-items:center;gap:8px">
+                <span class="plan-meta" x-text="plan.tasks.length + ' 项任务'"></span>
+                <button class="btn btn-primary btn-sm"
+                        @click.stop="applyPlan(plan.id)"
+                        title="应用到本周">🚀</button>
+                <button class="btn btn-ghost btn-sm"
+                        @click.stop="deletePlan(plan.id)"
+                        title="删除">🗑️</button>
+              </span>
+            </div>
+
+            <!-- Expanded: Task Editor -->
+            <div class="plan-card-body" x-show="plan._expanded">
+              <template x-for="(task, tIdx) in plan.tasks" :key="task.id">
+                <div class="template-task-row">
+                  <span class="priority-dot" :class="task.priority || 'low'"></span>
+                  <input type="text" x-model="task.title" @blur="savePlans()">
+                  <select class="priority-select" x-model="task.priority" @change="savePlans()">
+                    <option value="low">🟢 低</option>
+                    <option value="medium">🟡 中</option>
+                    <option value="high">🔴 高</option>
+                  </select>
+                  <span class="day-chip"
+                        :class="{ selected: task.dayOfWeek !== null }"
+                        @click="cycleDayOfWeek(task)"
+                        x-text="getDayLabel(task.dayOfWeek)"
+                        title="点击设置/取消星期"></span>
+                  <button class="btn btn-ghost btn-sm" @click="removeTemplateTask(plan, tIdx)">✕</button>
+                </div>
+              </template>
+
+              <!-- Add task to template -->
+              <div class="add-template-row">
+                <input type="text"
+                       :placeholder="'添加任务到「' + plan.name + '」…'"
+                       x-model="plan._newTaskTitle"
+                       @keydown.enter.prevent="addTemplateTask(plan); plan._newTaskTitle = ''">
+                <button class="btn btn-primary btn-sm"
+                        @click="addTemplateTask(plan); plan._newTaskTitle = ''"
+                        :disabled="!plan._newTaskTitle || !plan._newTaskTitle.trim()">添加</button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Create New Plan -->
+      <div class="create-plan-row">
+        <input type="text"
+               placeholder="创建新的周计划模板…"
+               x-model="newPlanName"
+               @keydown.enter.prevent="createPlan(); newPlanName = ''">
+        <button class="btn btn-primary"
+                @click="createPlan(); newPlanName = ''"
+                :disabled="!newPlanName.trim()">📝 创建</button>
+      </div>
+
+      <!-- No plans -->
+      <div class="empty-state card" x-show="planTemplates.length === 0" style="margin-top:16px">
+        <div class="emoji">🗂️</div>
+        <div class="msg">还没有周计划模板</div>
+        <p style="font-size:0.85rem;color:var(--color-text-muted)">
+          在上面创建一个周计划模板，然后应用到本周开始使用
+        </p>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         SETTINGS VIEW
+         ============================================================ -->
+    <div x-show="activeTab === 'settings'" x-transition>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:16px">⚙️ 设置</div>
+
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">🌙 深色模式</div>
+            <div class="setting-desc">切换明暗主题</div>
+          </div>
+          <div class="toggle" :class="{ active: isDark }" @click="toggleTheme()"></div>
+        </div>
+
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">📤 导出数据</div>
+            <div class="setting-desc">备份所有数据为 JSON 文件</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" @click="exportData()">导出</button>
+        </div>
+
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">📥 导入数据</div>
+            <div class="setting-desc">从备份文件恢复数据</div>
+          </div>
+          <div>
+            <input type="file" class="hidden-file-input" id="importFileInput" @change="importData($event)" accept=".json">
+            <button class="btn btn-secondary btn-sm" @click="document.getElementById('importFileInput').click()">选择文件</button>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">🗑️ 清除所有数据</div>
+            <div class="setting-desc">删除所有计划、任务和历史记录</div>
+          </div>
+          <button class="btn btn-danger btn-sm" @click="confirmClear = true">清除</button>
+        </div>
+
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--color-border);text-align:center;font-size:0.8rem;color:var(--color-text-muted)">
+          周计划 v1.0 · 数据仅保存在本地浏览器
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ============================================================
+     Confirm Clear Modal
+     ============================================================ -->
+<div class="modal-overlay" x-show="confirmClear" @click.self="confirmClear = false" x-transition>
+  <div class="modal-content">
+    <div class="modal-title">⚠️ 确认清除所有数据？</div>
+    <p style="color:var(--color-text-secondary);margin-bottom:8px">此操作将永久删除所有周计划、任务记录和历史数据，且无法恢复。</p>
+    <p style="color:var(--color-text-muted);font-size:0.85rem">建议先导出数据备份。</p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" @click="confirmClear = false">取消</button>
+      <button class="btn btn-primary" @click="exportData()">先导出再清除</button>
+      <button class="btn btn-danger" @click="clearAllData(); confirmClear = false">确认清除</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     Toast Container
+     ============================================================ -->
+<div class="toast-container">
+  <template x-for="toast in toasts" :key="toast.id">
+    <div class="toast" :class="toast.type" x-text="toast.message" x-transition></div>
+  </template>
+</div>
+
+<!-- ============================================================
+     JavaScript — Alpine App + Data Layer
+     ============================================================ -->
+<script>
+/* ==============================================================
+   Helpers
+   ============================================================== */
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
+}
+
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+}
+
+function getISOWeekInfo(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  const monday = new Date(d);
+  monday.setUTCDate(d.getUTCDate() - (dayNum - 1));
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  return {
+    year: d.getUTCFullYear(),
+    week: weekNo,
+    startDate: monday.toISOString().split('T')[0],
+    endDate: sunday.toISOString().split('T')[0]
+  };
+}
+
+const DAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+const DAY_NAMES_FULL = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+const MONTH_NAMES = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+function formatDateChinese(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return DAY_NAMES_FULL[d.getDay()] + ' ' +
+    d.getFullYear() + '年' + MONTH_NAMES[d.getMonth()] + d.getDate() + '日';
+}
+
+function getDayOfWeek(dateStr) {
+  return new Date(dateStr + 'T00:00:00').getDay();
+}
+
+/* ==============================================================
+   Alpine App
+   ============================================================== */
+function app() {
+  return {
+    /* ---- UI State ---- */
+    activeTab: 'today',
+    newTaskTitle: '',
+    newPlanName: '',
+    selectedPlanId: '',
+    confirmClear: false,
+    toasts: [],
+
+    /* ---- Persisted Data ---- */
+    planTemplates: Alpine.$persist([]),
+    weeks: Alpine.$persist([]),
+    currentWeekUnassigned: Alpine.$persist([]),
+
+    /* ---- Derived: Current --- */
+    get isoWeek() {
+      return getISOWeekInfo(new Date());
+    },
+
+    get currentWeek() {
+      let w = this.weeks.find(w =>
+        w.year === this.isoWeek.year && w.weekNumber === this.isoWeek.week
+      );
+      if (!w) {
+        w = {
+          id: generateId(),
+          planTemplateId: null,
+          planTemplateName: '',
+          year: this.isoWeek.year,
+          weekNumber: this.isoWeek.week,
+          startDate: this.isoWeek.startDate,
+          endDate: this.isoWeek.endDate,
+          days: []
+        };
+        this.weeks.push(w);
+      }
+      return w;
+    },
+
+    get currentDay() {
+      const d = todayStr();
+      let day = this.currentWeek.days.find(dd => dd.date === d);
+      if (!day) {
+        day = {
+          date: d,
+          dayOfWeek: new Date().getDay(),
+          reflection: '',
+          tasks: []
+        };
+        this.currentWeek.days.push(day);
+      }
+      return day;
+    },
+
+    get todayTasks() {
+      return this.currentDay.tasks || [];
+    },
+
+    get unassignedTasks() {
+      return this.currentWeekUnassigned || [];
+    },
+
+    get unassignedCount() {
+      return this.unassignedTasks.length;
+    },
+
+    get completedCount() {
+      return this.todayTasks.filter(t => t.completed).length;
+    },
+
+    get todayCompletionRate() {
+      if (this.todayTasks.length === 0) return 0;
+      return Math.round((this.completedCount / this.todayTasks.length) * 100);
+    },
+
+    /* ---- Derived: History --- */
+    get historyWeeks() {
+      const all = [...this.weeks].sort((a, b) => {
+        if (a.year !== b.year) return b.year - a.year;
+        return b.weekNumber - a.weekNumber;
+      });
+      return all.filter(w => w.days && w.days.length > 0);
+    },
+
+    /* ---- Theme --- */
+    get isDark() {
+      return document.documentElement.getAttribute('data-theme') === 'dark';
+    },
+
+    /* ---- Actions: Today Tasks --- */
+    addAdHocTask(title) {
+      if (!title || !title.trim()) return;
+      const task = {
+        id: generateId(),
+        templateTaskId: null,
+        title: title.trim(),
+        description: '',
+        priority: 'low',
+        completed: false,
+        completedAt: null,
+        addedAt: new Date().toISOString(),
+        isAdHoc: true,
+        order: this.todayTasks.length
+      };
+      this.currentDay.tasks.push(task);
+      this.showToast('已添加任务：' + task.title, 'success');
+    },
+
+    toggleTask(task, idx) {
+      task.completed = !task.completed;
+      task.completedAt = task.completed ? new Date().toISOString() : null;
+      if (task.completed) {
+        this.showToast('✅ 任务完成！', 'success');
+      }
+    },
+
+    removeTaskFromToday(idx) {
+      const task = this.todayTasks[idx];
+      if (!task) return;
+      // Move back to unassigned pool
+      const unassigned = {
+        id: generateId(),
+        templateTaskId: task.templateTaskId,
+        title: task.title,
+        description: task.description || '',
+        priority: task.priority || 'low',
+        carriedFromWeekId: null
+      };
+      this.currentWeekUnassigned.push(unassigned);
+      this.currentDay.tasks.splice(idx, 1);
+      this.showToast('已移回任务池', 'info');
+    },
+
+    addFromPool(poolIdx) {
+      const ut = this.unassignedTasks[poolIdx];
+      if (!ut) return;
+      const task = {
+        id: generateId(),
+        templateTaskId: ut.templateTaskId || null,
+        title: ut.title,
+        description: ut.description || '',
+        priority: ut.priority || 'low',
+        completed: false,
+        completedAt: null,
+        addedAt: new Date().toISOString(),
+        isAdHoc: false,
+        order: this.todayTasks.length
+      };
+      this.currentDay.tasks.push(task);
+      this.currentWeekUnassigned.splice(poolIdx, 1);
+      this.showToast('已加入今日：' + task.title, 'success');
+    },
+
+    /* ---- Actions: Reflection --- */
+    saveReflection() {
+      // The x-model already binds reflection, nothing extra needed
+      // But we could trigger a save toast
+    },
+
+    /* ---- Actions: Week Plans --- */
+    createPlan() {
+      if (!this.newPlanName.trim()) return;
+      const plan = {
+        id: generateId(),
+        name: this.newPlanName.trim(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        tasks: [],
+        _expanded: true,
+        _newTaskTitle: ''
+      };
+      this.planTemplates.push(plan);
+      this.newPlanName = '';
+      this.showToast('已创建计划：' + plan.name, 'success');
+    },
+
+    addTemplateTask(plan) {
+      if (!plan._newTaskTitle || !plan._newTaskTitle.trim()) return;
+      plan.tasks.push({
+        id: generateId(),
+        title: plan._newTaskTitle.trim(),
+        description: '',
+        priority: 'low',
+        dayOfWeek: null,
+        recurring: false,
+        recurringInterval: null,
+        order: plan.tasks.length
+      });
+      plan._newTaskTitle = '';
+      plan.updatedAt = new Date().toISOString();
+      this.savePlans();
+    },
+
+    removeTemplateTask(plan, tIdx) {
+      plan.tasks.splice(tIdx, 1);
+      plan.updatedAt = new Date().toISOString();
+      this.savePlans();
+    },
+
+    deletePlan(planId) {
+      if (!confirm('确定要删除这个周计划模板吗？已应用的历史数据不受影响。')) return;
+      const idx = this.planTemplates.findIndex(p => p.id === planId);
+      if (idx >= 0) {
+        this.planTemplates.splice(idx, 1);
+        this.showToast('已删除计划模板', 'info');
+      }
+    },
+
+    savePlans() {
+      // $persist handles this automatically, but we force reactivity
+      this.planTemplates = [...this.planTemplates];
+    },
+
+    cycleDayOfWeek(task) {
+      // null → 1(Mon) → 2(Tue) → ... → 6(Sat) → 0(Sun) → null
+      if (task.dayOfWeek === null) {
+        task.dayOfWeek = 1;
+      } else if (task.dayOfWeek === 0) {
+        task.dayOfWeek = null;
+      } else if (task.dayOfWeek >= 6) {
+        task.dayOfWeek = 0;
+      } else {
+        task.dayOfWeek++;
+      }
+      this.savePlans();
+    },
+
+    /* ---- Actions: Apply Plan --- */
+    applyPlan(planId) {
+      if (!planId) return;
+      const plan = this.planTemplates.find(p => p.id === planId);
+      if (!plan) return;
+
+      // Set plan name on current week
+      this.currentWeek.planTemplateId = plan.id;
+      this.currentWeek.planTemplateName = plan.name;
+
+      // Clear existing unassigned
+      this.currentWeekUnassigned = [];
+
+      // Copy template tasks
+      const today = new Date().getDay();
+      plan.tasks.forEach(tmpl => {
+        // If task has a dayOfWeek hint matching today, pre-assign to today
+        if (tmpl.dayOfWeek !== null && tmpl.dayOfWeek === today) {
+          const task = {
+            id: generateId(),
+            templateTaskId: tmpl.id,
+            title: tmpl.title,
+            description: tmpl.description || '',
+            priority: tmpl.priority || 'low',
+            completed: false,
+            completedAt: null,
+            addedAt: new Date().toISOString(),
+            isAdHoc: false,
+            order: this.todayTasks.length
+          };
+          this.currentDay.tasks.push(task);
+        } else {
+          // Otherwise add to unassigned pool
+          this.currentWeekUnassigned.push({
+            id: generateId(),
+            templateTaskId: tmpl.id,
+            title: tmpl.title,
+            description: tmpl.description || '',
+            priority: tmpl.priority || 'low',
+            carriedFromWeekId: null,
+            dayOfWeekHint: tmpl.dayOfWeek
+          });
+        }
+      });
+
+      this.showToast('🚀 已应用计划：' + plan.name, 'success');
+      this.activeTab = 'today';
+    },
+
+    /* ---- Actions: History Helpers --- */
+    getDayCompletion(day) {
+      if (!day.tasks || day.tasks.length === 0) return 0;
+      const done = day.tasks.filter(t => t.completed).length;
+      return Math.round((done / day.tasks.length) * 100);
+    },
+
+    getDayDoneCount(day) {
+      if (!day.tasks) return 0;
+      return day.tasks.filter(t => t.completed).length;
+    },
+
+    /* ---- Actions: Settings --- */
+    toggleTheme() {
+      const html = document.documentElement;
+      const newTheme = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', newTheme);
+      localStorage.setItem('wwp:theme', newTheme);
+    },
+
+    exportData() {
+      const data = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        planTemplates: this.planTemplates.map(p => {
+          const { _expanded, _newTaskTitle, ...rest } = p;
+          return rest;
+        }),
+        weeks: this.weeks,
+        currentWeekUnassigned: this.currentWeekUnassigned
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'weekly-planner-backup-' + todayStr() + '.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      this.showToast('✅ 数据已导出', 'success');
+    },
+
+    importData(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (!data.version || !data.planTemplates || !data.weeks) {
+            throw new Error('无效的数据格式');
+          }
+          if (!confirm('导入将覆盖当前所有数据，确定继续？')) return;
+          // Restore template expansions
+          this.planTemplates = data.planTemplates.map(p => ({
+            ...p,
+            _expanded: false,
+            _newTaskTitle: ''
+          }));
+          this.weeks = data.weeks;
+          this.currentWeekUnassigned = data.currentWeekUnassigned || [];
+          this.showToast('✅ 数据已导入', 'success');
+        } catch (err) {
+          alert('导入失败：' + err.message);
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = '';
+    },
+
+    clearAllData() {
+      this.planTemplates = [];
+      this.weeks = [];
+      this.currentWeekUnassigned = [];
+      this.showToast('🗑️ 所有数据已清除', 'info');
+    },
+
+    /* ---- Helpers --- */
+    formatToday() {
+      return formatDateChinese(todayStr());
+    },
+
+    formatDayHeader(dateStr) {
+      return formatDateChinese(dateStr);
+    },
+
+    formatWeekRange(week) {
+      const s = week.startDate || week.days[0]?.date || '';
+      const e = week.endDate || week.days[week.days.length - 1]?.date || '';
+      if (!s || !e) return '';
+      const sd = new Date(s + 'T00:00:00');
+      const ed = new Date(e + 'T00:00:00');
+      return MONTH_NAMES[sd.getMonth()] + sd.getDate() + '日 — ' +
+             MONTH_NAMES[ed.getMonth()] + ed.getDate() + '日';
+    },
+
+    getWeekDateRange() {
+      return this.formatWeekRange(this.currentWeek);
+    },
+
+    getDayLabel(dayOfWeek) {
+      if (dayOfWeek === null) return '任意';
+      return DAY_NAMES[dayOfWeek];
+    },
+
+    /* ---- Toast --- */
+    showToast(message, type) {
+      const toast = { id: generateId(), message, type };
+      this.toasts.push(toast);
+      setTimeout(() => {
+        this.toasts = this.toasts.filter(t => t.id !== toast.id);
+      }, 2500);
+    },
+
+    /* ---- Init --- */
+    init() {
+      // Restore theme
+      const savedTheme = localStorage.getItem('wwp:theme');
+      if (savedTheme) {
+        document.documentElement.setAttribute('data-theme', savedTheme);
+      }
+
+      // Draw chart when history tab is shown
+      this.$watch('activeTab', (tab) => {
+        if (tab === 'history') {
+          this.$nextTick(() => {
+            setTimeout(() => this.drawChart(), 100);
+          });
+        }
+      });
+    },
+
+    /* ---- Chart Drawing --- */
+    drawChart() {
+      const canvas = document.getElementById('historyChart');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+      const w = rect.width;
+      const h = rect.height;
+      ctx.clearRect(0, 0, w, h);
+
+      // Collect last 28 days data
+      const days = [];
+      const now = new Date();
+      for (let i = 27; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const dateStr = d.getFullYear() + '-' +
+          String(d.getMonth() + 1).padStart(2, '0') + '-' +
+          String(d.getDate()).padStart(2, '0');
+        // Find day in history
+        let tasks = [];
+        for (const week of this.weeks) {
+          const day = week.days?.find(dd => dd.date === dateStr);
+          if (day) { tasks = day.tasks || []; break; }
+        }
+        const total = tasks.length;
+        const done = tasks.filter(t => t.completed).length;
+        const rate = total > 0 ? Math.round((done / total) * 100) : -1;
+        days.push({ dateStr, rate, dayOfWeek: d.getDay() });
+      }
+
+      if (days.length === 0) return;
+
+      // Chart dimensions
+      const padding = { top: 10, right: 16, bottom: 30, left: 40 };
+      const chartW = w - padding.left - padding.right;
+      const chartH = h - padding.top - padding.bottom;
+
+      // Draw grid lines
+      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-border').trim();
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const y = padding.top + (chartH / 4) * i;
+        const pct = 100 - i * 25;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, y);
+        ctx.lineTo(w - padding.right, y);
+        ctx.stroke();
+
+        // Y-axis label
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text-muted').trim();
+        ctx.font = '11px -apple-system, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(pct + '%', padding.left - 6, y + 4);
+      }
+
+      // Bar width
+      const barWidth = Math.max(4, Math.min(14, chartW / days.length - 4));
+      const gap = (chartW - barWidth * days.length) / (days.length + 1);
+
+      // Draw bars
+      days.forEach((day, i) => {
+        const x = padding.left + gap + i * (barWidth + gap);
+        const barH = day.rate >= 0 ? (chartH * day.rate / 100) : 0;
+
+        // Bar color
+        let barColor;
+        if (day.rate < 0) {
+          barColor = getComputedStyle(document.documentElement).getPropertyValue('--color-border').trim();
+        } else if (day.rate >= 80) {
+          barColor = getComputedStyle(document.documentElement).getPropertyValue('--color-low').trim();
+        } else if (day.rate >= 40) {
+          barColor = getComputedStyle(document.documentElement).getPropertyValue('--color-medium').trim();
+        } else {
+          barColor = getComputedStyle(document.documentElement).getPropertyValue('--color-high').trim();
+        }
+
+        // Draw bar
+        const y = padding.top + chartH - barH;
+        ctx.fillStyle = day.rate >= 0 ? barColor : 'transparent';
+        ctx.beginPath();
+        ctx.roundRect(x, y, barWidth, Math.max(barH, day.rate >= 0 ? 2 : 0), [2, 2, 0, 0]);
+        ctx.fill();
+
+        // Highlight today
+        if (day.dateStr === todayStr()) {
+          ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim();
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.roundRect(x - 2, y - 2, barWidth + 4, Math.max(barH, 2) + 2, [3, 3, 0, 0]);
+          ctx.stroke();
+        }
+
+        // X-axis label (only every 7 days = Mondays)
+        if (day.dayOfWeek === 1 || i === days.length - 1) {
+          const label = (day.dateStr.split('-')[1] || '') + '/' + (day.dateStr.split('-')[2] || '');
+          ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text-muted').trim();
+          ctx.font = '10px -apple-system, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(label, x + barWidth / 2, h - 6);
+        }
+      });
+    }
+  };
+}
+</script>
+
+</body>
+</html>
