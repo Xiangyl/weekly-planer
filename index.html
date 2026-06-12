@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>周计划 · 每日任务</title>
-<script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/persist@3.14.9/dist/cdn.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
 <style>
 /* ============================================================
@@ -1083,8 +1082,8 @@ body {
               <template x-for="(task, tIdx) in plan.tasks" :key="task.id">
                 <div class="template-task-row">
                   <span class="priority-dot" :class="task.priority || 'low'"></span>
-                  <input type="text" x-model="task.title" @blur="savePlans()">
-                  <select class="priority-select" x-model="task.priority" @change="savePlans()">
+                  <input type="text" x-model="task.title" @blur="autoSave()">
+                  <select class="priority-select" x-model="task.priority" @change="autoSave()">
                     <option value="low">🟢 低</option>
                     <option value="medium">🟡 中</option>
                     <option value="high">🔴 高</option>
@@ -1263,7 +1262,55 @@ function getDayOfWeek(dateStr) {
 /* ==============================================================
    Alpine App
    ============================================================== */
+/* ==============================================================
+   Data Layer — Manual localStorage management
+   ============================================================== */
+const STORAGE_KEY = 'wwp:v2:state'; // v2 = manual persistence (no Alpine.$persist)
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== 'object') return null;
+    return data;
+  } catch (e) {
+    console.warn('Failed to load state, resetting:', e);
+    return null;
+  }
+}
+
+function saveState(state) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.error('Failed to save state:', e);
+    alert('数据保存失败！可能是存储空间不足，请导出数据备份。');
+  }
+}
+
 function app() {
+  /* ---- Load saved state ---- */
+  const saved = loadState();
+
+  /* ---- Build initial data ---- */
+  const initialPlans = saved?.planTemplates || [];
+  const initialWeeks = saved?.weeks || [];
+  const initialUnassigned = saved?.currentWeekUnassigned || [];
+
+  /* ---- Schedule auto-save ---- */
+  let saveTimer = null;
+  function scheduleSave(state) {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      saveState({
+        planTemplates: state.planTemplates,
+        weeks: state.weeks,
+        currentWeekUnassigned: state.currentWeekUnassigned
+      });
+    }, 200);
+  }
+
   return {
     /* ---- UI State ---- */
     activeTab: 'today',
@@ -1273,10 +1320,10 @@ function app() {
     confirmClear: false,
     toasts: [],
 
-    /* ---- Persisted Data ---- */
-    planTemplates: Alpine.$persist([]),
-    weeks: Alpine.$persist([]),
-    currentWeekUnassigned: Alpine.$persist([]),
+    /* ---- Persisted Data (plain arrays, Alpine manages reactivity) ---- */
+    planTemplates: initialPlans,
+    weeks: initialWeeks,
+    currentWeekUnassigned: initialUnassigned,
 
     /* ---- Derived: Current --- */
     get isoWeek() {
@@ -1353,6 +1400,11 @@ function app() {
       return document.documentElement.getAttribute('data-theme') === 'dark';
     },
 
+    /* ---- Mutation helper (triggers save on any data change) ---- */
+    autoSave() {
+      scheduleSave(this);
+    },
+
     /* ---- Actions: Today Tasks --- */
     addAdHocTask(title) {
       if (!title || !title.trim()) return;
@@ -1369,12 +1421,14 @@ function app() {
         order: this.todayTasks.length
       };
       this.currentDay.tasks.push(task);
+      this.autoSave();
       this.showToast('已添加任务：' + task.title, 'success');
     },
 
     toggleTask(task, idx) {
       task.completed = !task.completed;
       task.completedAt = task.completed ? new Date().toISOString() : null;
+      this.autoSave();
       if (task.completed) {
         this.showToast('✅ 任务完成！', 'success');
       }
@@ -1394,6 +1448,7 @@ function app() {
       };
       this.currentWeekUnassigned.push(unassigned);
       this.currentDay.tasks.splice(idx, 1);
+      this.autoSave();
       this.showToast('已移回任务池', 'info');
     },
 
@@ -1414,29 +1469,32 @@ function app() {
       };
       this.currentDay.tasks.push(task);
       this.currentWeekUnassigned.splice(poolIdx, 1);
+      this.autoSave();
       this.showToast('已加入今日：' + task.title, 'success');
     },
 
     /* ---- Actions: Reflection --- */
     saveReflection() {
-      // The x-model already binds reflection, nothing extra needed
-      // But we could trigger a save toast
+      this.autoSave();
     },
 
     /* ---- Actions: Week Plans --- */
     createPlan() {
-      if (!this.newPlanName.trim()) return;
+      const name = (this.newPlanName || '').trim();
+      if (!name) return;
       const plan = {
         id: generateId(),
-        name: this.newPlanName.trim(),
+        name: name,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         tasks: [],
         _expanded: true,
         _newTaskTitle: ''
       };
-      this.planTemplates.push(plan);
+      // Create a NEW array to ensure Alpine detects the change
+      this.planTemplates = [...this.planTemplates, plan];
       this.newPlanName = '';
+      this.autoSave();
       this.showToast('已创建计划：' + plan.name, 'success');
     },
 
@@ -1454,27 +1512,20 @@ function app() {
       });
       plan._newTaskTitle = '';
       plan.updatedAt = new Date().toISOString();
-      this.savePlans();
+      this.autoSave();
     },
 
     removeTemplateTask(plan, tIdx) {
       plan.tasks.splice(tIdx, 1);
       plan.updatedAt = new Date().toISOString();
-      this.savePlans();
+      this.autoSave();
     },
 
     deletePlan(planId) {
       if (!confirm('确定要删除这个周计划模板吗？已应用的历史数据不受影响。')) return;
-      const idx = this.planTemplates.findIndex(p => p.id === planId);
-      if (idx >= 0) {
-        this.planTemplates.splice(idx, 1);
-        this.showToast('已删除计划模板', 'info');
-      }
-    },
-
-    savePlans() {
-      // $persist handles this automatically, but we force reactivity
-      this.planTemplates = [...this.planTemplates];
+      this.planTemplates = this.planTemplates.filter(p => p.id !== planId);
+      this.autoSave();
+      this.showToast('已删除计划模板', 'info');
     },
 
     cycleDayOfWeek(task) {
@@ -1488,7 +1539,7 @@ function app() {
       } else {
         task.dayOfWeek++;
       }
-      this.savePlans();
+      this.autoSave();
     },
 
     /* ---- Actions: Apply Plan --- */
@@ -1505,10 +1556,10 @@ function app() {
       this.currentWeekUnassigned = [];
 
       // Copy template tasks
-      const today = new Date().getDay();
+      const todayDow = new Date().getDay();
       plan.tasks.forEach(tmpl => {
         // If task has a dayOfWeek hint matching today, pre-assign to today
-        if (tmpl.dayOfWeek !== null && tmpl.dayOfWeek === today) {
+        if (tmpl.dayOfWeek !== null && tmpl.dayOfWeek === todayDow) {
           const task = {
             id: generateId(),
             templateTaskId: tmpl.id,
@@ -1536,6 +1587,7 @@ function app() {
         }
       });
 
+      this.autoSave();
       this.showToast('🚀 已应用计划：' + plan.name, 'success');
       this.activeTab = 'today';
     },
@@ -1562,7 +1614,7 @@ function app() {
 
     exportData() {
       const data = {
-        version: 1,
+        version: 2,
         exportedAt: new Date().toISOString(),
         planTemplates: this.planTemplates.map(p => {
           const { _expanded, _newTaskTitle, ...rest } = p;
@@ -1584,23 +1636,24 @@ function app() {
     importData(event) {
       const file = event.target.files[0];
       if (!file) return;
+      const self = this;
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
           const data = JSON.parse(e.target.result);
-          if (!data.version || !data.planTemplates || !data.weeks) {
+          if (!data.planTemplates || !data.weeks) {
             throw new Error('无效的数据格式');
           }
           if (!confirm('导入将覆盖当前所有数据，确定继续？')) return;
-          // Restore template expansions
-          this.planTemplates = data.planTemplates.map(p => ({
+          self.planTemplates = data.planTemplates.map(p => ({
             ...p,
             _expanded: false,
             _newTaskTitle: ''
           }));
-          this.weeks = data.weeks;
-          this.currentWeekUnassigned = data.currentWeekUnassigned || [];
-          this.showToast('✅ 数据已导入', 'success');
+          self.weeks = data.weeks;
+          self.currentWeekUnassigned = data.currentWeekUnassigned || [];
+          self.autoSave();
+          self.showToast('✅ 数据已导入', 'success');
         } catch (err) {
           alert('导入失败：' + err.message);
         }
@@ -1613,6 +1666,7 @@ function app() {
       this.planTemplates = [];
       this.weeks = [];
       this.currentWeekUnassigned = [];
+      this.autoSave();
       this.showToast('🗑️ 所有数据已清除', 'info');
     },
 
@@ -1626,8 +1680,8 @@ function app() {
     },
 
     formatWeekRange(week) {
-      const s = week.startDate || week.days[0]?.date || '';
-      const e = week.endDate || week.days[week.days.length - 1]?.date || '';
+      const s = week.startDate || week.days?.[0]?.date || '';
+      const e = week.endDate || week.days?.[week.days.length - 1]?.date || '';
       if (!s || !e) return '';
       const sd = new Date(s + 'T00:00:00');
       const ed = new Date(e + 'T00:00:00');
@@ -1734,6 +1788,24 @@ function app() {
       // Bar width
       const barWidth = Math.max(4, Math.min(14, chartW / days.length - 4));
       const gap = (chartW - barWidth * days.length) / (days.length + 1);
+
+      // Polyfill roundRect for older browsers
+      if (!ctx.roundRect) {
+        ctx.roundRect = function(x, y, w, h, radii) {
+          const r = Array.isArray(radii) ? radii : [radii, radii, radii, radii];
+          ctx.beginPath();
+          ctx.moveTo(x + r[0], y);
+          ctx.lineTo(x + w - r[1], y);
+          ctx.quadraticCurveTo(x + w, y, x + w, y + r[1]);
+          ctx.lineTo(x + w, y + h - r[2]);
+          ctx.quadraticCurveTo(x + w, y + h, x + w - r[2], y + h);
+          ctx.lineTo(x + r[3], y + h);
+          ctx.quadraticCurveTo(x, y + h, x, y + h - r[3]);
+          ctx.lineTo(x, y + r[0]);
+          ctx.quadraticCurveTo(x, y, x + r[0], y);
+          ctx.closePath();
+        };
+      }
 
       // Draw bars
       days.forEach((day, i) => {
