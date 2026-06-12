@@ -407,6 +407,32 @@ body {
 }
 
 .pool-add-btn:hover { background: var(--color-primary); color: #fff; }
+.pool-add-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.pool-add-btn:disabled:hover { background: var(--color-primary-light); color: var(--color-primary); }
+
+.pool-progress {
+  font-size: 0.72rem;
+  color: var(--color-text-secondary);
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.pool-progress.done { color: var(--color-low); font-weight: 600; }
+
+.pool-item.pool-done .task-title,
+.pool-item.pool-done { color: var(--color-completed); }
+.pool-item.pool-done .pool-add-btn { opacity: 0.3; cursor: not-allowed; }
+
+/* Target count select in template editor */
+.target-select {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
 
 /* ============================================================
    Empty State
@@ -889,28 +915,12 @@ body {
     <div x-show="activeTab === 'today'" x-transition>
 
       <!-- Week Status -->
-      <div class="week-status" x-show="currentWeek.planTemplateName">
-        📋 本周计划：<span class="plan-label" x-text="currentWeek.planTemplateName"></span>
-        <span style="margin-left:auto;font-size:0.8rem" x-text="getWeekDateRange()"></span>
+      <div class="week-status" x-show="currentWeek.planTemplateName" x-text="currentWeek.planTemplateName + ' · ' + getWeekDateRange()">
       </div>
 
-      <!-- Apply Plan (when no plan is active) -->
-      <div class="apply-plan-area" x-show="!currentWeek.planTemplateName && planTemplates.length > 0">
-        <select x-model="selectedPlanId">
-          <option value="">— 选择周计划模板 —</option>
-          <template x-for="p in planTemplates" :key="p.id">
-            <option :value="p.id" x-text="p.name"></option>
-          </template>
-        </select>
-        <button class="btn btn-primary btn-sm"
-                @click="applyPlan(selectedPlanId)"
-                :disabled="!selectedPlanId">
-          🚀 应用到本周
-        </button>
-      </div>
       <div class="empty-state" x-show="!currentWeek.planTemplateName && planTemplates.length === 0">
         <div class="emoji">📝</div>
-        <div class="msg">还没有周计划模板</div>
+        <div class="msg">还没有周计划</div>
         <button class="btn btn-primary" @click="activeTab = 'plans'">去创建一个</button>
       </div>
 
@@ -986,9 +996,14 @@ body {
 
             <div x-show="unassignedTasks.length > 0">
               <template x-for="(task, idx) in unassignedTasks" :key="task.id">
-                <div class="pool-item">
-                  <button class="pool-add-btn" @click="addFromPool(idx)" title="加入今日">+</button>
+                <div class="pool-item" :class="{ 'pool-done': (task.progress || 0) >= (task.targetCount || 1) }">
+                  <button class="pool-add-btn" @click="addFromPool(idx)" title="加入今日"
+                          :disabled="(task.progress || 0) >= (task.targetCount || 1)">+</button>
                   <span style="flex:1;font-size:0.875rem" x-text="task.title"></span>
+                  <span x-show="(task.targetCount || 1) > 1"
+                        class="pool-progress"
+                        :class="{ done: (task.progress || 0) >= (task.targetCount || 1) }"
+                        x-text="(task.progress || 0) + '/' + task.targetCount + ((task.progress || 0) >= task.targetCount ? ' ✓' : '')"></span>
                   <span class="priority-dot" :class="task.priority || 'low'"></span>
                 </div>
               </template>
@@ -1067,6 +1082,7 @@ body {
                 <span x-text="plan.name"></span>
               </span>
               <span style="display:flex;align-items:center;gap:8px">
+                <span x-show="plan.year != null" class="plan-meta" x-text="plan.year + 'W' + plan.weekNumber"></span>
                 <span class="plan-meta" x-text="plan.tasks.length + ' 项任务'"></span>
                 <button class="btn btn-primary btn-sm"
                         @click.stop="applyPlan(plan.id)"
@@ -1087,6 +1103,15 @@ body {
                     <option value="low">🟢 低</option>
                     <option value="medium">🟡 中</option>
                     <option value="high">🔴 高</option>
+                  </select>
+                  <select class="target-select" x-model="task.targetCount" @change="autoSave()">
+                    <option value="1">1次</option>
+                    <option value="2">2次</option>
+                    <option value="3">3次</option>
+                    <option value="4">4次</option>
+                    <option value="5">5次</option>
+                    <option value="6">6次</option>
+                    <option value="7">7次</option>
                   </select>
                   <span class="day-chip"
                         :class="{ selected: task.dayOfWeek !== null }"
@@ -1113,14 +1138,22 @@ body {
       </div>
 
       <!-- Create New Plan -->
-      <div class="create-plan-row">
+      <div class="card" style="margin-top:16px">
+        <div class="card-title" style="margin-bottom:12px">➕ 新建周计划</div>
         <input type="text"
-               placeholder="创建新的周计划模板…"
+               style="width:100%;padding:10px 14px;border:2px solid var(--color-border);border-radius:var(--radius-md);font-size:0.9375rem;background:var(--color-surface);color:var(--color-text);outline:none;margin-bottom:10px"
+               placeholder="计划名称…"
                x-model="newPlanName"
                @keydown.enter.prevent="createPlan(); newPlanName = ''">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+          <span style="font-size:0.875rem;color:var(--color-text-secondary)">目标周：</span>
+          <button class="btn btn-ghost btn-sm" @click="shiftTargetWeek(-1)" title="前一周">◀</button>
+          <span style="font-weight:600;font-size:0.9375rem" x-text="weekLabelStr"></span>
+          <button class="btn btn-ghost btn-sm" @click="shiftTargetWeek(1)" title="后一周">▶</button>
+        </div>
         <button class="btn btn-primary"
                 @click="createPlan(); newPlanName = ''"
-                :disabled="!newPlanName.trim()">📝 创建</button>
+                :disabled="!newPlanName.trim()" style="width:100%">📝 创建并应用到本周</button>
       </div>
 
       <!-- No plans -->
@@ -1176,7 +1209,7 @@ body {
         </div>
 
         <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--color-border);text-align:center;font-size:0.8rem;color:var(--color-text-muted)">
-          周计划 v1.0 · 数据仅保存在本地浏览器
+          周计划 v2.0 · 数据仅保存在本地浏览器
         </div>
       </div>
     </div>
@@ -1265,15 +1298,73 @@ function getDayOfWeek(dateStr) {
 /* ==============================================================
    Data Layer — Manual localStorage management
    ============================================================== */
-const STORAGE_KEY = 'wwp:v2:state'; // v2 = manual persistence (no Alpine.$persist)
+const STORAGE_KEY = 'wwp:v3:state';
+const OLD_STORAGE_KEY = 'wwp:v2:state';
+
+function migrateV2ToV3(data) {
+  const plans = (data.planTemplates || []).map(p => {
+    const { _expanded, _newTaskTitle, ...rest } = p;
+    return {
+      ...rest,
+      year: p.year || null,
+      weekNumber: p.weekNumber || null,
+      startDate: p.startDate || null,
+      endDate: p.endDate || null,
+      tasks: (p.tasks || []).map(t => ({
+        ...t,
+        targetCount: t.targetCount || 1
+      }))
+    };
+  });
+
+  const weeks = (data.weeks || []).map(w => {
+    if (!w.unassigned) w.unassigned = [];
+    return w;
+  });
+
+  if (data.currentWeekUnassigned && data.currentWeekUnassigned.length > 0) {
+    const isoInfo = getISOWeekInfo(new Date());
+    let currentWeek = weeks.find(w => w.year === isoInfo.year && w.weekNumber === isoInfo.week);
+    if (!currentWeek) {
+      currentWeek = {
+        id: generateId(),
+        planTemplateId: null, planTemplateName: '',
+        year: isoInfo.year, weekNumber: isoInfo.week,
+        startDate: isoInfo.startDate, endDate: isoInfo.endDate,
+        days: [], unassigned: []
+      };
+      weeks.push(currentWeek);
+    }
+    const existingTitles = new Set(currentWeek.unassigned.map(u => u.title));
+    data.currentWeekUnassigned.forEach(u => {
+      if (!existingTitles.has(u.title)) {
+        currentWeek.unassigned.push({
+          ...u, targetCount: u.targetCount || 1, progress: u.progress || 0
+        });
+      }
+    });
+  }
+
+  return { planTemplates: plans, weeks: weeks };
+}
 
 function loadState() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw);
-    if (!data || typeof data !== 'object') return null;
-    return data;
+    let raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const data = JSON.parse(raw);
+      if (data && typeof data === 'object') return data;
+    }
+    raw = localStorage.getItem(OLD_STORAGE_KEY);
+    if (raw) {
+      const v2data = JSON.parse(raw);
+      if (v2data && typeof v2data === 'object') {
+        const v3data = migrateV2ToV3(v2data);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(v3data));
+        return v3data;
+      }
+    }
+    return null;
   } catch (e) {
     console.warn('Failed to load state, resetting:', e);
     return null;
@@ -1296,7 +1387,6 @@ function app() {
   /* ---- Build initial data ---- */
   const initialPlans = saved?.planTemplates || [];
   const initialWeeks = saved?.weeks || [];
-  const initialUnassigned = saved?.currentWeekUnassigned || [];
 
   /* ---- Schedule auto-save ---- */
   let saveTimer = null;
@@ -1305,10 +1395,25 @@ function app() {
     saveTimer = setTimeout(() => {
       saveState({
         planTemplates: state.planTemplates,
-        weeks: state.weeks,
-        currentWeekUnassigned: state.currentWeekUnassigned
+        weeks: state.weeks
       });
     }, 200);
+  }
+
+  /* ---- Helpers for week display ---- */
+  function getISOForDelta(delta) {
+    const now = new Date();
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + delta * 7);
+    return getISOWeekInfo(d);
+  }
+
+  function weekLabel(wi) {
+    if (!wi) return '';
+    return wi.year + '年第' + wi.week + '周 · ' +
+      MONTH_NAMES[new Date(wi.startDate + 'T00:00:00').getMonth()] +
+      new Date(wi.startDate + 'T00:00:00').getDate() + '日 — ' +
+      MONTH_NAMES[new Date(wi.endDate + 'T00:00:00').getMonth()] +
+      new Date(wi.endDate + 'T00:00:00').getDate() + '日';
   }
 
   return {
@@ -1316,14 +1421,13 @@ function app() {
     activeTab: 'today',
     newTaskTitle: '',
     newPlanName: '',
-    selectedPlanId: '',
+    newPlanTargetWeek: getISOWeekInfo(new Date()),
     confirmClear: false,
     toasts: [],
 
-    /* ---- Persisted Data (plain arrays, Alpine manages reactivity) ---- */
+    /* ---- Persisted Data ---- */
     planTemplates: initialPlans,
     weeks: initialWeeks,
-    currentWeekUnassigned: initialUnassigned,
 
     /* ---- Derived: Current --- */
     get isoWeek() {
@@ -1343,10 +1447,12 @@ function app() {
           weekNumber: this.isoWeek.week,
           startDate: this.isoWeek.startDate,
           endDate: this.isoWeek.endDate,
-          days: []
+          days: [],
+          unassigned: []
         };
         this.weeks.push(w);
       }
+      if (!w.unassigned) w.unassigned = [];
       return w;
     },
 
@@ -1370,7 +1476,10 @@ function app() {
     },
 
     get unassignedTasks() {
-      return this.currentWeekUnassigned || [];
+      return this.currentWeek.unassigned || [];
+    },
+    set unassignedTasks(val) {
+      this.currentWeek.unassigned = val;
     },
 
     get unassignedCount() {
@@ -1437,16 +1546,25 @@ function app() {
     removeTaskFromToday(idx) {
       const task = this.todayTasks[idx];
       if (!task) return;
-      // Move back to unassigned pool
-      const unassigned = {
-        id: generateId(),
-        templateTaskId: task.templateTaskId,
-        title: task.title,
-        description: task.description || '',
-        priority: task.priority || 'low',
-        carriedFromWeekId: null
-      };
-      this.currentWeekUnassigned.push(unassigned);
+      // Find matching pool item to decrement progress (for multi-target tasks)
+      const pool = this.currentWeek.unassigned;
+      const poolIdx = pool.findIndex(u => u.templateTaskId === task.templateTaskId);
+      if (poolIdx >= 0 && (pool[poolIdx].progress || 0) > 0) {
+        pool[poolIdx].progress -= 1;
+      }
+      // If pool item no longer exists (was already completed), re-create it
+      if (poolIdx < 0) {
+        this.currentWeek.unassigned.push({
+          id: generateId(),
+          templateTaskId: task.templateTaskId,
+          title: task.title,
+          description: task.description || '',
+          priority: task.priority || 'low',
+          carriedFromWeekId: null,
+          targetCount: task._targetCount || 1,
+          progress: 0
+        });
+      }
       this.currentDay.tasks.splice(idx, 1);
       this.autoSave();
       this.showToast('已移回任务池', 'info');
@@ -1455,6 +1573,7 @@ function app() {
     addFromPool(poolIdx) {
       const ut = this.unassignedTasks[poolIdx];
       if (!ut) return;
+      const targetCount = ut.targetCount || 1;
       const task = {
         id: generateId(),
         templateTaskId: ut.templateTaskId || null,
@@ -1465,12 +1584,23 @@ function app() {
         completedAt: null,
         addedAt: new Date().toISOString(),
         isAdHoc: false,
-        order: this.todayTasks.length
+        order: this.todayTasks.length,
+        _targetCount: targetCount
       };
       this.currentDay.tasks.push(task);
-      this.currentWeekUnassigned.splice(poolIdx, 1);
+      // Increment weekly progress
+      ut.progress = (ut.progress || 0) + 1;
+      // Only remove from pool if target fully reached
+      if (ut.progress >= targetCount) {
+        this.currentWeek.unassigned.splice(poolIdx, 1);
+      }
       this.autoSave();
-      this.showToast('已加入今日：' + task.title, 'success');
+      this.showToast(
+        targetCount > 1
+          ? '已加入今日：' + task.title + ' (' + ut.progress + '/' + targetCount + ')'
+          : '已加入今日：' + task.title,
+        'success'
+      );
     },
 
     /* ---- Actions: Reflection --- */
@@ -1479,23 +1609,71 @@ function app() {
     },
 
     /* ---- Actions: Week Plans --- */
+    shiftTargetWeek(delta) {
+      this.newPlanTargetWeek = getISOForDelta(delta);
+    },
+
     createPlan() {
       const name = (this.newPlanName || '').trim();
       if (!name) return;
+      const tw = this.newPlanTargetWeek;
       const plan = {
         id: generateId(),
         name: name,
+        year: tw.year,
+        weekNumber: tw.week,
+        startDate: tw.startDate,
+        endDate: tw.endDate,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         tasks: [],
         _expanded: true,
         _newTaskTitle: ''
       };
-      // Create a NEW array to ensure Alpine detects the change
       this.planTemplates = [...this.planTemplates, plan];
+      // Auto-populate the week pool
+      this.bindPlanToWeek(plan);
       this.newPlanName = '';
       this.autoSave();
-      this.showToast('已创建计划：' + plan.name, 'success');
+      this.showToast('已创建计划：' + plan.name + ' (' + weekLabel(tw) + ')', 'success');
+    },
+
+    bindPlanToWeek(plan) {
+      // Find or create the week entry
+      let week = this.weeks.find(w =>
+        w.year === (plan.year || this.isoWeek.year) &&
+        w.weekNumber === (plan.weekNumber || this.isoWeek.week)
+      );
+      if (!week) {
+        const wi = (plan.year != null) ? { year: plan.year, week: plan.weekNumber, startDate: plan.startDate, endDate: plan.endDate } : this.isoWeek;
+        week = {
+          id: generateId(),
+          planTemplateId: plan.id,
+          planTemplateName: plan.name,
+          year: wi.year,
+          weekNumber: wi.week,
+          startDate: wi.startDate,
+          endDate: wi.endDate,
+          days: [],
+          unassigned: []
+        };
+        this.weeks.push(week);
+      } else {
+        week.planTemplateId = plan.id;
+        week.planTemplateName = plan.name;
+      }
+      // Populate unassigned pool from plan tasks
+      week.unassigned = plan.tasks.map(tmpl => ({
+        id: generateId(),
+        templateTaskId: tmpl.id,
+        title: tmpl.title,
+        description: tmpl.description || '',
+        priority: tmpl.priority || 'low',
+        carriedFromWeekId: null,
+        dayOfWeekHint: tmpl.dayOfWeek,
+        targetCount: tmpl.targetCount || 1,
+        progress: 0
+      }));
     },
 
     addTemplateTask(plan) {
@@ -1506,6 +1684,7 @@ function app() {
         description: '',
         priority: 'low',
         dayOfWeek: null,
+        targetCount: 1,
         recurring: false,
         recurringInterval: null,
         order: plan.tasks.length
@@ -1542,7 +1721,7 @@ function app() {
       this.autoSave();
     },
 
-    /* ---- Actions: Apply Plan --- */
+    /* ---- Actions: Apply Plan (backward compat) --- */
     applyPlan(planId) {
       if (!planId) return;
       const plan = this.planTemplates.find(p => p.id === planId);
@@ -1552,13 +1731,13 @@ function app() {
       this.currentWeek.planTemplateId = plan.id;
       this.currentWeek.planTemplateName = plan.name;
 
-      // Clear existing unassigned
-      this.currentWeekUnassigned = [];
+      // Clear existing unassigned for current week
+      this.currentWeek.unassigned = [];
 
-      // Copy template tasks
+      // Copy template tasks into pool with targetCount
       const todayDow = new Date().getDay();
       plan.tasks.forEach(tmpl => {
-        // If task has a dayOfWeek hint matching today, pre-assign to today
+        const tc = tmpl.targetCount || 1;
         if (tmpl.dayOfWeek !== null && tmpl.dayOfWeek === todayDow) {
           const task = {
             id: generateId(),
@@ -1570,19 +1749,21 @@ function app() {
             completedAt: null,
             addedAt: new Date().toISOString(),
             isAdHoc: false,
-            order: this.todayTasks.length
+            order: this.todayTasks.length,
+            _targetCount: tc
           };
           this.currentDay.tasks.push(task);
         } else {
-          // Otherwise add to unassigned pool
-          this.currentWeekUnassigned.push({
+          this.currentWeek.unassigned.push({
             id: generateId(),
             templateTaskId: tmpl.id,
             title: tmpl.title,
             description: tmpl.description || '',
             priority: tmpl.priority || 'low',
             carriedFromWeekId: null,
-            dayOfWeekHint: tmpl.dayOfWeek
+            dayOfWeekHint: tmpl.dayOfWeek,
+            targetCount: tc,
+            progress: 0
           });
         }
       });
@@ -1591,6 +1772,7 @@ function app() {
       this.showToast('🚀 已应用计划：' + plan.name, 'success');
       this.activeTab = 'today';
     },
+    get weekLabelStr() { return weekLabel(this.newPlanTargetWeek); },
 
     /* ---- Actions: History Helpers --- */
     getDayCompletion(day) {
@@ -1614,14 +1796,13 @@ function app() {
 
     exportData() {
       const data = {
-        version: 2,
+        version: 3,
         exportedAt: new Date().toISOString(),
         planTemplates: this.planTemplates.map(p => {
           const { _expanded, _newTaskTitle, ...rest } = p;
           return rest;
         }),
-        weeks: this.weeks,
-        currentWeekUnassigned: this.currentWeekUnassigned
+        weeks: this.weeks
       };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -1645,13 +1826,24 @@ function app() {
             throw new Error('无效的数据格式');
           }
           if (!confirm('导入将覆盖当前所有数据，确定继续？')) return;
-          self.planTemplates = data.planTemplates.map(p => ({
+          // Handle old format imports (v2 had currentWeekUnassigned at top level)
+          if (data.currentWeekUnassigned && data.currentWeekUnassigned.length > 0 && data.version < 3) {
+            data = migrateV2ToV3(data);
+          }
+          // Ensure all weeks have unassigned and tasks have targetCount
+          data.weeks = (data.weeks || []).map(w => {
+            if (!w.unassigned) w.unassigned = [];
+            w.unassigned = w.unassigned.map(u => ({ ...u, targetCount: u.targetCount || 1, progress: u.progress || 0 }));
+            return w;
+          });
+          data.planTemplates = (data.planTemplates || []).map(p => ({
             ...p,
             _expanded: false,
-            _newTaskTitle: ''
+            _newTaskTitle: '',
+            tasks: (p.tasks || []).map(t => ({ ...t, targetCount: t.targetCount || 1 }))
           }));
+          self.planTemplates = data.planTemplates;
           self.weeks = data.weeks;
-          self.currentWeekUnassigned = data.currentWeekUnassigned || [];
           self.autoSave();
           self.showToast('✅ 数据已导入', 'success');
         } catch (err) {
@@ -1665,7 +1857,6 @@ function app() {
     clearAllData() {
       this.planTemplates = [];
       this.weeks = [];
-      this.currentWeekUnassigned = [];
       this.autoSave();
       this.showToast('🗑️ 所有数据已清除', 'info');
     },
