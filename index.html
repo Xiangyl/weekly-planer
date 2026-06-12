@@ -699,25 +699,6 @@ body {
 
 .add-template-row input:focus { border-color: var(--color-primary); }
 
-.create-plan-row {
-  display: flex;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.create-plan-row input {
-  flex: 1;
-  padding: 10px 14px;
-  border: 2px dashed var(--color-border);
-  border-radius: var(--radius-md);
-  font-size: 0.9375rem;
-  background: transparent;
-  color: var(--color-text);
-  outline: none;
-}
-
-.create-plan-row input:focus { border-color: var(--color-primary); border-style: solid; }
-
 /* ============================================================
    Modal
    ============================================================ */
@@ -840,25 +821,6 @@ body {
 /* ============================================================
    Apply Plan Selector
    ============================================================ */
-.apply-plan-area {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.apply-plan-area select {
-  padding: 8px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-size: 0.875rem;
-  background: var(--color-surface);
-  color: var(--color-text);
-  cursor: pointer;
-  outline: none;
-}
-
-.apply-plan-area select:focus { border-color: var(--color-primary); }
 
 /* ============================================================
    Transition helpers
@@ -1082,7 +1044,7 @@ body {
                 <span x-text="plan.name"></span>
               </span>
               <span style="display:flex;align-items:center;gap:8px">
-                <span x-show="plan.year != null" class="plan-meta" x-text="plan.year + 'W' + plan.weekNumber"></span>
+                <span x-show="plan.startDate" class="plan-meta" x-text="plan.startDate.slice(5) + ' — ' + plan.endDate.slice(5)"></span>
                 <span class="plan-meta" x-text="plan.tasks.length + ' 项任务'"></span>
                 <button class="btn btn-primary btn-sm"
                         @click.stop="applyPlan(plan.id)"
@@ -1139,31 +1101,23 @@ body {
 
       <!-- Create New Plan -->
       <div class="card" style="margin-top:16px">
-        <div class="card-title" style="margin-bottom:12px">➕ 新建周计划</div>
-        <input type="text"
-               style="width:100%;padding:10px 14px;border:2px solid var(--color-border);border-radius:var(--radius-md);font-size:0.9375rem;background:var(--color-surface);color:var(--color-text);outline:none;margin-bottom:10px"
-               placeholder="计划名称…"
-               x-model="newPlanName"
-               @keydown.enter.prevent="createPlan(); newPlanName = ''">
+        <div class="card-title" style="margin-bottom:12px">➕ 为某周添加计划</div>
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-          <span style="font-size:0.875rem;color:var(--color-text-secondary)">目标周：</span>
           <button class="btn btn-ghost btn-sm" @click="shiftTargetWeek(-1)" title="前一周">◀</button>
           <span style="font-weight:600;font-size:0.9375rem" x-text="weekLabelStr"></span>
           <button class="btn btn-ghost btn-sm" @click="shiftTargetWeek(1)" title="后一周">▶</button>
         </div>
         <button class="btn btn-primary"
-                @click="createPlan(); newPlanName = ''"
-                :disabled="!newPlanName.trim()" style="width:100%">📝 创建并应用到本周</button>
+                @click="createPlan()" style="width:100%">📝 创建计划</button>
       </div>
 
       <!-- No plans -->
       <div class="empty-state card" x-show="planTemplates.length === 0" style="margin-top:16px">
         <div class="emoji">🗂️</div>
-        <div class="msg">还没有周计划模板</div>
+        <div class="msg">还没有周计划</div>
         <p style="font-size:0.85rem;color:var(--color-text-muted)">
-          在上面创建一个周计划模板，然后应用到本周开始使用
+          在上方选择目标周，点击「创建计划」开始添加每周任务
         </p>
-      </div>
     </div>
 
     <!-- ============================================================
@@ -1420,7 +1374,6 @@ function app() {
     /* ---- UI State ---- */
     activeTab: 'today',
     newTaskTitle: '',
-    newPlanName: '',
     newPlanTargetWeek: getISOWeekInfo(new Date()),
     confirmClear: false,
     toasts: [],
@@ -1614,12 +1567,16 @@ function app() {
     },
 
     createPlan() {
-      const name = (this.newPlanName || '').trim();
-      if (!name) return;
       const tw = this.newPlanTargetWeek;
+      const autoName = tw.year + '年第' + tw.week + '周';
+      // Don't create duplicate plans for the same week
+      if (this.planTemplates.find(p => p.year === tw.year && p.weekNumber === tw.week)) {
+        this.showToast('该周已有计划，请直接在下方编辑', 'info');
+        return;
+      }
       const plan = {
         id: generateId(),
-        name: name,
+        name: autoName,
         year: tw.year,
         weekNumber: tw.week,
         startDate: tw.startDate,
@@ -1633,9 +1590,8 @@ function app() {
       this.planTemplates = [...this.planTemplates, plan];
       // Auto-populate the week pool
       this.bindPlanToWeek(plan);
-      this.newPlanName = '';
       this.autoSave();
-      this.showToast('已创建计划：' + plan.name + ' (' + weekLabel(tw) + ')', 'success');
+      this.showToast('已创建计划：' + autoName, 'success');
     },
 
     bindPlanToWeek(plan) {
