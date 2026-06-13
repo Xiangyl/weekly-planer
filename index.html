@@ -1288,12 +1288,21 @@ function getDeviceId() {
 }
 
 // ---- Supabase client ----
-let supabase = null;
+let supabaseClient = null;
 function getSupabase() {
-  if (!supabase && window.supabase && window.supabase.createClient) {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  if (supabaseClient) return supabaseClient;
+  if (!window.supabase) return null;
+  // Supabase v2 UMD: window.supabase is the createClient function
+  if (typeof window.supabase === 'function') {
+    supabaseClient = window.supabase(SUPABASE_URL, SUPABASE_KEY);
+    return supabaseClient;
   }
-  return supabase;
+  // Fallback: check for .createClient method
+  if (window.supabase.createClient) {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    return supabaseClient;
+  }
+  return null;
 }
 
 // ---- V2→V3 migration (kept for backward compat) ----
@@ -2079,8 +2088,13 @@ function app() {
       // Background cloud sync (non-blocking, fires after page renders)
       const self = this;
       setTimeout(function() {
-        if (!window.supabase || !window.supabase.createClient) {
+        if (!window.supabase) {
           self.syncStatus = 'SDK 未加载';
+          return;
+        }
+        // Supabase v2 UMD: window.supabase may be createClient itself or a namespace
+        if (typeof window.supabase !== 'function' && !window.supabase.createClient) {
+          self.syncStatus = 'SDK 格式异常';
           return;
         }
         self.syncStatus = '正在同步…';
