@@ -1219,17 +1219,16 @@ function fmtLocal(date) {
 }
 
 function getISOWeekInfo(date) {
-  // All calculations in local time — NOT UTC — so that date strings
-  // match the user's actual calendar regardless of timezone offset.
+  // All calculations in local time so dates match the user's calendar.
   const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const dayNum = d.getDay() || 7; // Sun=7, Mon=1, ... Sat=6
-  d.setDate(d.getDate() + 4 - dayNum);          // shift to Thursday of same ISO week
+  const dow = d.getDay() || 7;          // Mon=1 ... Sun=7
+  d.setDate(d.getDate() + 4 - dow);     // shift to Thursday of the same ISO week
   const yearStart = new Date(d.getFullYear(), 0, 1);
   const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
   const monday = new Date(d);
-  monday.setDate(d.getDate() - (dayNum - 1));    // back to Monday
+  monday.setDate(d.getDate() - 3);      // Thursday → Monday (fixed offset, not original dow)
   const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);           // forward to Sunday
+  sunday.setDate(monday.getDate() + 6); // Monday → Sunday
   return {
     year: d.getFullYear(),
     week: weekNo,
@@ -1308,23 +1307,73 @@ function migrateV2ToV3(data) {
   return { planTemplates: plans, weeks: weeks };
 }
 
+function getISOWeekFromYearWeek(year, week) {
+  // Get the approximate date of Monday in the given ISO year/week
+  const jan4 = new Date(year, 0, 4);           // Jan 4 is always in ISO week 1
+  const jan4Dow = jan4.getDay() || 7;
+  const week1Monday = new Date(jan4);
+  week1Monday.setDate(jan4.getDate() - (jan4Dow - 1));
+  const targetMonday = new Date(week1Monday);
+  targetMonday.setDate(week1Monday.getDate() + (week - 1) * 7);
+  return getISOWeekInfo(targetMonday);
+}
+
+function repairDates(plans, weeks) {
+  let repaired = false;
+  // Repair plan dates
+  const fixedPlans = plans.map(p => {
+    if (p.year != null && p.weekNumber != null) {
+      const wi = getISOWeekFromYearWeek(p.year, p.weekNumber);
+      if (p.startDate !== wi.startDate || p.endDate !== wi.endDate) {
+        repaired = true;
+        return { ...p, startDate: wi.startDate, endDate: wi.endDate };
+      }
+    }
+    return p;
+  });
+  // Repair week dates
+  const fixedWeeks = weeks.map(w => {
+    if (w.year != null && w.weekNumber != null) {
+      const wi = getISOWeekFromYearWeek(w.year, w.weekNumber);
+      if (w.startDate !== wi.startDate || w.endDate !== wi.endDate) {
+        repaired = true;
+        return { ...w, startDate: wi.startDate, endDate: wi.endDate };
+      }
+    }
+    return w;
+  });
+  return { plans: fixedPlans, weeks: fixedWeeks, repaired };
+}
+
 function loadState() {
   try {
     let raw = localStorage.getItem(STORAGE_KEY);
+    let data = null;
     if (raw) {
-      const data = JSON.parse(raw);
-      if (data && typeof data === 'object') return data;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') data = parsed;
     }
-    raw = localStorage.getItem(OLD_STORAGE_KEY);
-    if (raw) {
-      const v2data = JSON.parse(raw);
-      if (v2data && typeof v2data === 'object') {
-        const v3data = migrateV2ToV3(v2data);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(v3data));
-        return v3data;
+    if (!data) {
+      raw = localStorage.getItem(OLD_STORAGE_KEY);
+      if (raw) {
+        const v2data = JSON.parse(raw);
+        if (v2data && typeof v2data === 'object') {
+          data = migrateV2ToV3(v2data);
+        }
       }
     }
-    return null;
+    if (!data) return null;
+    // Auto-repair date drift from old UTC-based calculations
+    const { plans, weeks, repaired } = repairDates(
+      data.planTemplates || [],
+      data.weeks || []
+    );
+    data.planTemplates = plans;
+    data.weeks = weeks;
+    if (repaired) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    }
+    return data;
   } catch (e) {
     console.warn('Failed to load state, resetting:', e);
     return null;
