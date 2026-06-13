@@ -391,7 +391,8 @@ body {
 }
 
 .pool-item:hover { background: var(--color-surface-hover); }
-.pool-item .task-title { font-size: 0.875rem; }
+
+.pool-title { flex: 1; font-size: 0.875rem; }
 
 .pool-add-btn {
   background: var(--color-primary-light);
@@ -419,8 +420,8 @@ body {
 
 .pool-progress.done { color: var(--color-low); font-weight: 600; }
 
-.pool-item.pool-done .task-title,
 .pool-item.pool-done { color: var(--color-completed); }
+.pool-item.pool-done .pool-title { text-decoration: line-through; color: var(--color-completed); }
 .pool-item.pool-done .pool-add-btn { opacity: 0.3; cursor: not-allowed; }
 
 /* Target count select in template editor */
@@ -961,7 +962,7 @@ body {
                 <div class="pool-item" :class="{ 'pool-done': (task.progress || 0) >= (task.targetCount || 1) }">
                   <button class="pool-add-btn" @click="addFromPool(idx)" title="加入今日"
                           :disabled="(task.progress || 0) >= (task.targetCount || 1)">+</button>
-                  <span style="flex:1;font-size:0.875rem" x-text="task.title"></span>
+                  <span class="pool-title" x-text="task.title"></span>
                   <span x-show="(task.targetCount || 1) > 1"
                         class="pool-progress"
                         :class="{ done: (task.progress || 0) >= (task.targetCount || 1) }"
@@ -1046,9 +1047,6 @@ body {
               <span style="display:flex;align-items:center;gap:8px">
                 <span x-show="plan.startDate" class="plan-meta" x-text="plan.startDate.slice(5) + ' — ' + plan.endDate.slice(5)"></span>
                 <span class="plan-meta" x-text="plan.tasks.length + ' 项任务'"></span>
-                <button class="btn btn-primary btn-sm"
-                        @click.stop="applyPlan(plan.id)"
-                        title="应用到本周">🚀</button>
                 <button class="btn btn-ghost btn-sm"
                         @click.stop="deletePlan(plan.id)"
                         title="删除">🗑️</button>
@@ -1526,6 +1524,7 @@ function app() {
     addFromPool(poolIdx) {
       const ut = this.unassignedTasks[poolIdx];
       if (!ut) return;
+      if ((ut.progress || 0) >= (ut.targetCount || 1)) return;
       const targetCount = ut.targetCount || 1;
       const task = {
         id: generateId(),
@@ -1541,12 +1540,8 @@ function app() {
         _targetCount: targetCount
       };
       this.currentDay.tasks.push(task);
-      // Increment weekly progress
+      // Increment weekly progress — keep item in pool with strikethrough
       ut.progress = (ut.progress || 0) + 1;
-      // Only remove from pool if target fully reached
-      if (ut.progress >= targetCount) {
-        this.currentWeek.unassigned.splice(poolIdx, 1);
-      }
       this.autoSave();
       this.showToast(
         targetCount > 1
