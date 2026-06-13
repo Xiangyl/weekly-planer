@@ -1643,8 +1643,7 @@ function app() {
       // Auto-populate the week pool
       this.bindPlanToWeek(plan);
       this.autoSave();
-      this.showToast('已创建计划：' + autoName, 'success');
-      this.activeTab = 'today';
+      this.showToast('已创建计划：' + autoName + '，在下方添加任务即可', 'success');
     },
 
     bindPlanToWeek(plan) {
@@ -1687,7 +1686,7 @@ function app() {
 
     addTemplateTask(plan) {
       if (!plan._newTaskTitle || !plan._newTaskTitle.trim()) return;
-      plan.tasks.push({
+      const newTask = {
         id: generateId(),
         title: plan._newTaskTitle.trim(),
         description: '',
@@ -1697,9 +1696,29 @@ function app() {
         recurring: false,
         recurringInterval: null,
         order: plan.tasks.length
-      });
+      };
+      plan.tasks.push(newTask);
       plan._newTaskTitle = '';
       plan.updatedAt = new Date().toISOString();
+      // Auto-sync to the bound week's pool
+      if (plan.year != null && plan.weekNumber != null) {
+        const week = this.weeks.find(w =>
+          w.year === plan.year && w.weekNumber === plan.weekNumber
+        );
+        if (week) {
+          week.unassigned.push({
+            id: generateId(),
+            templateTaskId: newTask.id,
+            title: newTask.title,
+            description: '',
+            priority: newTask.priority,
+            carriedFromWeekId: null,
+            dayOfWeekHint: newTask.dayOfWeek,
+            targetCount: newTask.targetCount,
+            progress: 0
+          });
+        }
+      }
       this.autoSave();
     },
 
