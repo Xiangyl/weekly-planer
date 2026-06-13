@@ -1277,11 +1277,12 @@ const SUPABASE_KEY = 'sb_publishable_8iD5kT5cxO69IRh0oHH38Q_0XtUH3iS';
 const STORAGE_KEY = 'wwp:v4:state';
 const OLD_STORAGE_KEYS = ['wwp:v3:state', 'wwp:v2:state'];
 
-// ---- Device ID (persists in localStorage, survives cache clears) ----
+// ---- Device ID (user can set to sync across browsers) ----
 function getDeviceId() {
   let id = localStorage.getItem('wwp:device_id');
   if (!id) {
-    id = 'dev_' + generateId();
+    // Use a fixed default so all browsers sync to the same data by default
+    id = 'my_default';
     localStorage.setItem('wwp:device_id', id);
   }
   return id;
