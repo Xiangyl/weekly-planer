@@ -1410,12 +1410,6 @@ function app() {
   }
 
   /* ---- Helpers for week display ---- */
-  function getISOForDelta(delta) {
-    const now = new Date();
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + delta * 7);
-    return getISOWeekInfo(d);
-  }
-
   function weekLabel(wi) {
     if (!wi) return '';
     return wi.year + '年第' + wi.week + '周 · ' +
@@ -1615,7 +1609,10 @@ function app() {
 
     /* ---- Actions: Week Plans --- */
     shiftTargetWeek(delta) {
-      this.newPlanTargetWeek = getISOForDelta(delta);
+      const cur = this.newPlanTargetWeek;
+      const monday = new Date(cur.startDate + 'T00:00:00');
+      monday.setDate(monday.getDate() + delta * 7);
+      this.newPlanTargetWeek = getISOWeekInfo(monday);
     },
 
     createPlan() {
