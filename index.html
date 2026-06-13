@@ -1212,21 +1212,29 @@ function todayStr() {
     String(d.getDate()).padStart(2, '0');
 }
 
+function fmtLocal(date) {
+  return date.getFullYear() + '-' +
+    String(date.getMonth() + 1).padStart(2, '0') + '-' +
+    String(date.getDate()).padStart(2, '0');
+}
+
 function getISOWeekInfo(date) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  // All calculations in local time — NOT UTC — so that date strings
+  // match the user's actual calendar regardless of timezone offset.
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayNum = d.getDay() || 7; // Sun=7, Mon=1, ... Sat=6
+  d.setDate(d.getDate() + 4 - dayNum);          // shift to Thursday of same ISO week
+  const yearStart = new Date(d.getFullYear(), 0, 1);
   const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
   const monday = new Date(d);
-  monday.setUTCDate(d.getUTCDate() - (dayNum - 1));
+  monday.setDate(d.getDate() - (dayNum - 1));    // back to Monday
   const sunday = new Date(monday);
-  sunday.setUTCDate(monday.getUTCDate() + 6);
+  sunday.setDate(monday.getDate() + 6);           // forward to Sunday
   return {
-    year: d.getUTCFullYear(),
+    year: d.getFullYear(),
     week: weekNo,
-    startDate: monday.toISOString().split('T')[0],
-    endDate: sunday.toISOString().split('T')[0]
+    startDate: fmtLocal(monday),
+    endDate: fmtLocal(sunday)
   };
 }
 
@@ -1587,6 +1595,7 @@ function app() {
       this.bindPlanToWeek(plan);
       this.autoSave();
       this.showToast('已创建计划：' + autoName, 'success');
+      this.activeTab = 'today';
     },
 
     bindPlanToWeek(plan) {
