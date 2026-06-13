@@ -954,7 +954,10 @@ body {
           <div class="card">
             <div class="pool-header">
               <span class="card-title">📥 本周任务池</span>
-              <span class="pool-count" x-text="unassignedCount + ' 项'"></span>
+              <span style="display:flex;align-items:center;gap:6px">
+                <button class="btn btn-ghost btn-sm" @click="refreshCurrentPool()" title="从计划同步">🔄</button>
+                <span class="pool-count" x-text="unassignedCount + ' 项'"></span>
+              </span>
             </div>
 
             <div x-show="unassignedTasks.length > 0">
@@ -1058,13 +1061,13 @@ body {
               <template x-for="(task, tIdx) in plan.tasks" :key="task.id">
                 <div class="template-task-row">
                   <span class="priority-dot" :class="task.priority || 'low'"></span>
-                  <input type="text" x-model="task.title" @blur="autoSave()">
-                  <select class="priority-select" x-model="task.priority" @change="autoSave()">
+                  <input type="text" x-model="task.title" @blur="onTemplateFieldChange(plan)">
+                  <select class="priority-select" x-model="task.priority" @change="onTemplateFieldChange(plan)">
                     <option value="low">🟢 低</option>
                     <option value="medium">🟡 中</option>
                     <option value="high">🔴 高</option>
                   </select>
-                  <select class="target-select" x-model="task.targetCount" @change="autoSave()">
+                  <select class="target-select" x-model="task.targetCount" @change="onTemplateFieldChange(plan)">
                     <option value="1">1次</option>
                     <option value="2">2次</option>
                     <option value="3">3次</option>
@@ -1075,7 +1078,7 @@ body {
                   </select>
                   <span class="day-chip"
                         :class="{ selected: task.dayOfWeek !== null }"
-                        @click="cycleDayOfWeek(task)"
+                        @click="cycleDayOfWeek(task); onTemplateFieldChange(plan)"
                         x-text="getDayLabel(task.dayOfWeek)"
                         title="点击设置/取消星期"></span>
                   <button class="btn btn-ghost btn-sm" @click="removeTemplateTask(plan, tIdx)">✕</button>
@@ -1681,9 +1684,39 @@ function app() {
       }));
     },
 
+    /* ---- Sync pool from plan (add/delete/edit → auto-refresh) ---- */
+    syncPoolFromPlan(plan) {
+      if (!plan || plan.year == null || plan.weekNumber == null) return;
+      const week = this.weeks.find(w =>
+        w.year === plan.year && w.weekNumber === plan.weekNumber
+      );
+      if (!week) return;
+      // Build new pool from plan tasks, preserving progress of existing items
+      const oldMap = new Map();
+      (week.unassigned || []).forEach(u => {
+        if (u.templateTaskId) oldMap.set(u.templateTaskId, u);
+      });
+      week.unassigned = plan.tasks.map(tmpl => {
+        const old = oldMap.get(tmpl.id);
+        return {
+          id: old ? old.id : generateId(),
+          templateTaskId: tmpl.id,
+          title: tmpl.title,
+          description: tmpl.description || '',
+          priority: tmpl.priority || 'low',
+          carriedFromWeekId: null,
+          dayOfWeekHint: tmpl.dayOfWeek,
+          targetCount: tmpl.targetCount || 1,
+          progress: old ? (old.progress || 0) : 0
+        };
+      });
+      this.autoSave();
+      this.showToast('任务池已刷新', 'info');
+    },
+
     addTemplateTask(plan) {
       if (!plan._newTaskTitle || !plan._newTaskTitle.trim()) return;
-      const newTask = {
+      plan.tasks.push({
         id: generateId(),
         title: plan._newTaskTitle.trim(),
         description: '',
@@ -1693,36 +1726,16 @@ function app() {
         recurring: false,
         recurringInterval: null,
         order: plan.tasks.length
-      };
-      plan.tasks.push(newTask);
+      });
       plan._newTaskTitle = '';
       plan.updatedAt = new Date().toISOString();
-      // Auto-sync to the bound week's pool
-      if (plan.year != null && plan.weekNumber != null) {
-        const week = this.weeks.find(w =>
-          w.year === plan.year && w.weekNumber === plan.weekNumber
-        );
-        if (week) {
-          week.unassigned.push({
-            id: generateId(),
-            templateTaskId: newTask.id,
-            title: newTask.title,
-            description: '',
-            priority: newTask.priority,
-            carriedFromWeekId: null,
-            dayOfWeekHint: newTask.dayOfWeek,
-            targetCount: newTask.targetCount,
-            progress: 0
-          });
-        }
-      }
-      this.autoSave();
+      this.syncPoolFromPlan(plan);
     },
 
     removeTemplateTask(plan, tIdx) {
       plan.tasks.splice(tIdx, 1);
       plan.updatedAt = new Date().toISOString();
-      this.autoSave();
+      this.syncPoolFromPlan(plan);
     },
 
     deletePlan(planId) {
@@ -1798,6 +1811,49 @@ function app() {
       this.activeTab = 'today';
     },
     get weekLabelStr() { return weekLabel(this.newPlanTargetWeek); },
+
+    refreshCurrentPool() {
+      const week = this.currentWeek;
+      if (!week || !week.planTemplateId) {
+        this.showToast('本周暂无绑定计划', 'info');
+        return;
+      }
+      const plan = this.planTemplates.find(p => p.id === week.planTemplateId);
+      if (!plan) {
+        this.showToast('找不到对应的计划模板', 'info');
+        return;
+      }
+      this.syncPoolFromPlan(plan);
+    },
+
+    onTemplateFieldChange(plan) {
+      this.autoSave();
+      // Silent sync: rebuild pool from plan template, preserving progress
+      if (!plan || plan.year == null || plan.weekNumber == null) return;
+      const week = this.weeks.find(w =>
+        w.year === plan.year && w.weekNumber === plan.weekNumber
+      );
+      if (!week) return;
+      const oldMap = new Map();
+      (week.unassigned || []).forEach(u => {
+        if (u.templateTaskId) oldMap.set(u.templateTaskId, u);
+      });
+      week.unassigned = plan.tasks.map(tmpl => {
+        const old = oldMap.get(tmpl.id);
+        return {
+          id: old ? old.id : generateId(),
+          templateTaskId: tmpl.id,
+          title: tmpl.title,
+          description: tmpl.description || '',
+          priority: tmpl.priority || 'low',
+          carriedFromWeekId: null,
+          dayOfWeekHint: tmpl.dayOfWeek,
+          targetCount: tmpl.targetCount || 1,
+          progress: old ? (old.progress || 0) : 0
+        };
+      });
+      this.autoSave();
+    },
 
     /* ---- Actions: History Helpers --- */
     getDayCompletion(day) {
