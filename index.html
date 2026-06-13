@@ -2057,7 +2057,7 @@ function app() {
     },
 
     /* ---- Init --- */
-    async init() {
+    init() {
       // Restore theme
       const savedTheme = localStorage.getItem('wwp:theme');
       if (savedTheme) {
@@ -2073,21 +2073,29 @@ function app() {
         }
       });
 
-      // Background cloud sync (does not block rendering)
+      // Background cloud sync (non-blocking, fires after page renders)
       const self = this;
-      setTimeout(async () => {
-        self.syncStatus = '正在同步…';
-        const result = await syncFromCloud(self.deviceId, self.planTemplates, self.weeks);
-        if (result.updated) {
-          self.planTemplates = result.plans;
-          self.weeks = result.weeks;
-          saveLocalState({ planTemplates: result.plans, weeks: result.weeks });
-          self.syncStatus = '已同步 ☁️';
-        } else {
-          self.syncStatus = '本地数据';
+      setTimeout(function() {
+        if (!window.supabase || !window.supabase.createClient) {
+          self.syncStatus = 'SDK 未加载';
+          return;
         }
-        self.autoSave();
-      }, 500);
+        self.syncStatus = '正在同步…';
+        syncFromCloud(self.deviceId, self.planTemplates, self.weeks).then(function(result) {
+          if (result.updated) {
+            self.planTemplates = result.plans;
+            self.weeks = result.weeks;
+            saveLocalState({ planTemplates: result.plans, weeks: result.weeks });
+            self.syncStatus = '已同步 ☁️';
+          } else {
+            self.syncStatus = '本地数据';
+          }
+          self.autoSave();
+        }).catch(function(e) {
+          console.warn('Cloud sync failed:', e);
+          self.syncStatus = '同步失败';
+        });
+      }, 800);
     },
 
     /* ---- Chart Drawing --- */
