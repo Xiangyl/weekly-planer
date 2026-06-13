@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>周计划 · 每日任务</title>
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
 /* ============================================================
    CSS Custom Properties — Theme System
@@ -1163,8 +1164,16 @@ body {
           <button class="btn btn-danger btn-sm" @click="confirmClear = true">清除</button>
         </div>
 
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">🔗 设备同步</div>
+            <div class="setting-desc" x-text="'ID: ' + deviceId.substring(0,16) + '…'"></div>
+          </div>
+          <span style="font-size:0.8rem;color:var(--color-text-muted)" x-text="syncStatus"></span>
+        </div>
+
         <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--color-border);text-align:center;font-size:0.8rem;color:var(--color-text-muted)">
-          周计划 v2.0 · 数据仅保存在本地浏览器
+          周计划 v2.1 · Supabase 云端同步 · 多设备互通
         </div>
       </div>
     </div>
@@ -1258,11 +1267,33 @@ function getDayOfWeek(dateStr) {
    Alpine App
    ============================================================== */
 /* ==============================================================
-   Data Layer — Manual localStorage management
+   Data Layer — Supabase + localStorage hybrid
    ============================================================== */
-const STORAGE_KEY = 'wwp:v3:state';
-const OLD_STORAGE_KEY = 'wwp:v2:state';
+const SUPABASE_URL = 'https://dodazhwxqxkqbmtzzdso.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_8iD5kT5cxO69IRh0oHH38Q_0XtUH3iS';
+const STORAGE_KEY = 'wwp:v4:state';
+const OLD_STORAGE_KEYS = ['wwp:v3:state', 'wwp:v2:state'];
 
+// ---- Device ID (persists in localStorage, survives cache clears) ----
+function getDeviceId() {
+  let id = localStorage.getItem('wwp:device_id');
+  if (!id) {
+    id = 'dev_' + generateId();
+    localStorage.setItem('wwp:device_id', id);
+  }
+  return id;
+}
+
+// ---- Supabase client ----
+let supabase = null;
+function getSupabase() {
+  if (!supabase && window.supabase && window.supabase.createClient) {
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  }
+  return supabase;
+}
+
+// ---- V2→V3 migration (kept for backward compat) ----
 function migrateV2ToV3(data) {
   const plans = (data.planTemplates || []).map(p => {
     const { _expanded, _newTaskTitle, ...rest } = p;
@@ -1278,19 +1309,16 @@ function migrateV2ToV3(data) {
       }))
     };
   });
-
   const weeks = (data.weeks || []).map(w => {
     if (!w.unassigned) w.unassigned = [];
     return w;
   });
-
   if (data.currentWeekUnassigned && data.currentWeekUnassigned.length > 0) {
     const isoInfo = getISOWeekInfo(new Date());
     let currentWeek = weeks.find(w => w.year === isoInfo.year && w.weekNumber === isoInfo.week);
     if (!currentWeek) {
       currentWeek = {
-        id: generateId(),
-        planTemplateId: null, planTemplateName: '',
+        id: generateId(), planTemplateId: null, planTemplateName: '',
         year: isoInfo.year, weekNumber: isoInfo.week,
         startDate: isoInfo.startDate, endDate: isoInfo.endDate,
         days: [], unassigned: []
@@ -1306,13 +1334,11 @@ function migrateV2ToV3(data) {
       }
     });
   }
-
   return { planTemplates: plans, weeks: weeks };
 }
 
 function getISOWeekFromYearWeek(year, week) {
-  // Get the approximate date of Monday in the given ISO year/week
-  const jan4 = new Date(year, 0, 4);           // Jan 4 is always in ISO week 1
+  const jan4 = new Date(year, 0, 4);
   const jan4Dow = jan4.getDay() || 7;
   const week1Monday = new Date(jan4);
   week1Monday.setDate(jan4.getDate() - (jan4Dow - 1));
@@ -1323,7 +1349,6 @@ function getISOWeekFromYearWeek(year, week) {
 
 function repairDates(plans, weeks) {
   let repaired = false;
-  // Repair plan dates
   const fixedPlans = plans.map(p => {
     if (p.year != null && p.weekNumber != null) {
       const wi = getISOWeekFromYearWeek(p.year, p.weekNumber);
@@ -1334,7 +1359,6 @@ function repairDates(plans, weeks) {
     }
     return p;
   });
-  // Repair week dates
   const fixedWeeks = weeks.map(w => {
     if (w.year != null && w.weekNumber != null) {
       const wi = getISOWeekFromYearWeek(w.year, w.weekNumber);
@@ -1348,28 +1372,31 @@ function repairDates(plans, weeks) {
   return { plans: fixedPlans, weeks: fixedWeeks, repaired };
 }
 
-function loadState() {
+// ---- Load: localStorage cache first, then sync from cloud ----
+function loadLocalState() {
   try {
+    // Try v4 first (Supabase key)
     let raw = localStorage.getItem(STORAGE_KEY);
     let data = null;
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') data = parsed;
     }
-    if (!data) {
-      raw = localStorage.getItem(OLD_STORAGE_KEY);
+    // Fall back through old keys
+    for (const key of OLD_STORAGE_KEYS) {
+      if (data) break;
+      raw = localStorage.getItem(key);
       if (raw) {
-        const v2data = JSON.parse(raw);
-        if (v2data && typeof v2data === 'object') {
-          data = migrateV2ToV3(v2data);
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          data = key === 'wwp:v2:state' ? migrateV2ToV3(parsed) : parsed;
         }
       }
     }
     if (!data) return null;
-    // Auto-repair date drift from old UTC-based calculations
+    // Auto-repair date drift
     const { plans, weeks, repaired } = repairDates(
-      data.planTemplates || [],
-      data.weeks || []
+      data.planTemplates || [], data.weeks || []
     );
     data.planTemplates = plans;
     data.weeks = weeks;
@@ -1378,38 +1405,86 @@ function loadState() {
     }
     return data;
   } catch (e) {
-    console.warn('Failed to load state, resetting:', e);
+    console.warn('Failed to load local state:', e);
     return null;
   }
 }
 
-function saveState(state) {
+function saveLocalState(state) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ planTemplates: state.planTemplates, weeks: state.weeks }));
   } catch (e) {
-    console.error('Failed to save state:', e);
-    alert('数据保存失败！可能是存储空间不足，请导出数据备份。');
+    console.error('localStorage save failed:', e);
+  }
+}
+
+async function syncFromCloud(deviceId, localPlans, localWeeks) {
+  const sb = getSupabase();
+  if (!sb) return { plans: localPlans, weeks: localWeeks, updated: false };
+  try {
+    const { data, error } = await sb
+      .from('app_state')
+      .select('data, updated_at')
+      .eq('device_id', deviceId)
+      .maybeSingle();
+    if (error || !data) return { plans: localPlans, weeks: localWeeks, updated: false };
+
+    const cloud = data.data;
+    if (!cloud || !cloud.planTemplates || !cloud.weeks) return { plans: localPlans, weeks: localWeeks, updated: false };
+
+    // Merge: cloud wins for multi-device scenarios
+    const { plans, weeks, repaired } = repairDates(cloud.planTemplates, cloud.weeks);
+    const merged = { plans, weeks };
+    if (repaired) {
+      saveLocalState(merged);
+      pushToCloud(deviceId, plans, weeks).catch(() => {});
+    }
+    return { plans, weeks, updated: true, cloudTime: data.updated_at };
+  } catch (e) {
+    console.warn('Cloud sync read failed:', e);
+    return { plans: localPlans, weeks: localWeeks, updated: false };
+  }
+}
+
+async function pushToCloud(deviceId, plans, weeks) {
+  const sb = getSupabase();
+  if (!sb) return false;
+  try {
+    // Strip UI-only fields before saving
+    const cleanPlans = plans.map(p => {
+      const { _expanded, _newTaskTitle, ...rest } = p;
+      return rest;
+    });
+    const { error } = await sb
+      .from('app_state')
+      .upsert({
+        device_id: deviceId,
+        data: { planTemplates: cleanPlans, weeks: weeks },
+        updated_at: new Date().toISOString()
+      });
+    return !error;
+  } catch (e) {
+    console.warn('Cloud sync write failed:', e);
+    return false;
   }
 }
 
 function app() {
   /* ---- Load saved state ---- */
-  const saved = loadState();
+  const deviceId = getDeviceId();
+  const cached = loadLocalState();
 
-  /* ---- Build initial data ---- */
-  const initialPlans = saved?.planTemplates || [];
-  const initialWeeks = saved?.weeks || [];
+  const initialPlans = cached?.planTemplates || [];
+  const initialWeeks = cached?.weeks || [];
 
-  /* ---- Schedule auto-save ---- */
+  /* ---- Schedule auto-save (local + cloud) ---- */
   let saveTimer = null;
   function scheduleSave(state) {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      saveState({
-        planTemplates: state.planTemplates,
-        weeks: state.weeks
-      });
-    }, 200);
+      saveLocalState({ planTemplates: state.planTemplates, weeks: state.weeks });
+      pushToCloud(deviceId, state.planTemplates, state.weeks).catch(() => {});
+    }, 300);
   }
 
   /* ---- Helpers for week display ---- */
@@ -1429,6 +1504,8 @@ function app() {
     newPlanTargetWeek: getISOWeekInfo(new Date()),
     confirmClear: false,
     toasts: [],
+    deviceId: deviceId,
+    syncStatus: '从本地加载',
 
     /* ---- Persisted Data ---- */
     planTemplates: initialPlans,
@@ -1980,7 +2057,7 @@ function app() {
     },
 
     /* ---- Init --- */
-    init() {
+    async init() {
       // Restore theme
       const savedTheme = localStorage.getItem('wwp:theme');
       if (savedTheme) {
@@ -1995,6 +2072,22 @@ function app() {
           });
         }
       });
+
+      // Background cloud sync (does not block rendering)
+      const self = this;
+      setTimeout(async () => {
+        self.syncStatus = '正在同步…';
+        const result = await syncFromCloud(self.deviceId, self.planTemplates, self.weeks);
+        if (result.updated) {
+          self.planTemplates = result.plans;
+          self.weeks = result.weeks;
+          saveLocalState({ planTemplates: result.plans, weeks: result.weeks });
+          self.syncStatus = '已同步 ☁️';
+        } else {
+          self.syncStatus = '本地数据';
+        }
+        self.autoSave();
+      }, 500);
     },
 
     /* ---- Chart Drawing --- */
