@@ -1281,7 +1281,11 @@ const OLD_STORAGE_KEYS = ['wwp:v3:state', 'wwp:v2:state'];
 function getDeviceId() {
   let id = localStorage.getItem('wwp:device_id');
   if (!id) {
-    // Use a fixed default so all browsers sync to the same data by default
+    id = 'my_default';
+    localStorage.setItem('wwp:device_id', id);
+  }
+  // Auto-migrate old random IDs to the shared default
+  if (id.startsWith('dev_')) {
     id = 'my_default';
     localStorage.setItem('wwp:device_id', id);
   }
