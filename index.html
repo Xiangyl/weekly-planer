@@ -1571,15 +1571,16 @@ function app() {
     },
 
     get todayTasks() {
-      const tasks = this.currentDay.tasks || [];
-      const order = { high: 0, medium: 1, low: 2 };
-      return [...tasks].sort((a, b) => (order[a.priority] || 2) - (order[b.priority] || 2));
+      return this.currentDay.tasks || [];
     },
 
     get unassignedTasks() {
-      const tasks = this.currentWeek.unassigned || [];
+      return this.currentWeek.unassigned || [];
+    },
+
+    _sortByPriority(arr) {
       const order = { high: 0, medium: 1, low: 2 };
-      return [...tasks].sort((a, b) => (order[a.priority] || 2) - (order[b.priority] || 2));
+      arr.sort((a, b) => (order[a.priority] || 2) - (order[b.priority] || 2));
     },
     set unassignedTasks(val) {
       this.currentWeek.unassigned = val;
@@ -1612,8 +1613,11 @@ function app() {
       return document.documentElement.getAttribute('data-theme') === 'dark';
     },
 
-    /* ---- Mutation helper (triggers save on any data change) ---- */
+    /* ---- Mutation helper (sorts + saves on any data change) ---- */
     autoSave() {
+      // Sort today's tasks and pool by priority every time anything changes
+      this._sortByPriority(this.currentDay.tasks);
+      this._sortByPriority(this.currentWeek.unassigned);
       scheduleSave(this);
     },
 
@@ -1780,6 +1784,7 @@ function app() {
         targetCount: tmpl.targetCount || 1,
         progress: 0
       }));
+      this._sortByPriority(week.unassigned);
     },
 
     /* ---- Sync pool from plan (add/delete/edit → auto-refresh) ---- */
@@ -1808,6 +1813,7 @@ function app() {
           progress: old ? (old.progress || 0) : 0
         };
       });
+      this._sortByPriority(week.unassigned);
       this.autoSave();
       this.showToast('任务池已刷新', 'info');
     },
@@ -1950,6 +1956,7 @@ function app() {
           progress: old ? (old.progress || 0) : 0
         };
       });
+      this._sortByPriority(week.unassigned);
       this.autoSave();
     },
 
